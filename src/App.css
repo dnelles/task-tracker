@@ -1,10 +1,27 @@
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
+/* Make whole page background dark */
+body {
+  background-color: #1e1e1e;
+  color: #e0e0e0;
+  margin: 0;
+  min-height: 100vh;
+  font-family: 'Inter', 'Segoe UI', 'Roboto', sans-serif;
   text-align: center;
 }
 
+.app-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: center;
+  min-height: 66vh;
+  padding-top: 20px;
+  max-width: 900px;
+  color: inherit;
+  font-family: inherit;
+  text-align: inherit;
+}
+
+/* Optional: keep your existing logo styles, but darken hover glow */
 .logo {
   height: 6em;
   padding: 1.5em;
@@ -12,31 +29,285 @@
   transition: filter 300ms;
 }
 .logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
+  filter: drop-shadow(0 0 2em #00b5adaa);
 }
 .logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+  filter: drop-shadow(0 0 2em #00b5adbb);
 }
 
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
-}
-
+/* Cards or other sections you want to style */
 .card {
   padding: 2em;
+  background-color: #2a2a2a;
+  border-radius: 10px;
+  margin-bottom: 20px;
 }
 
+/* Status text or helper text */
 .read-the-docs {
-  color: #888;
+  color: #777777;
 }
+
+/* TaskManager styles */
+
+.input-title {
+  min-width: 220px; /* make Task Title wider */
+  max-width: 300px; /* optional max width */
+}
+
+.input-class {
+  min-width: 90px;  /* make Class input shorter */
+  max-width: 120px; /* optional max width */
+}
+
+.input-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 0px;
+  justify-content: center;
+}
+
+.input-text,
+.input-select,
+.input-date {
+  background-color: #222222;
+  border: 1.5px solid transparent;
+  color: #e0e0e0;
+  padding: 10px 14px;
+  font-size: 1rem;
+  border-radius: 8px;
+  min-width: 140px;
+  transition: border-color 0.2s ease;
+}
+
+.input-text::placeholder {
+  color: #777777;
+}
+
+.input-text:focus,
+.input-select:focus,
+.input-date:focus {
+  outline: none;
+  border-color: #00b5ad;
+}
+
+.button-primary {
+  background-color: #00b5ad;
+  border: none;
+  color: white;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  min-width: 120px;
+  transition: background-color 0.2s ease;
+}
+
+.button-primary:hover {
+  background-color: #009688;
+}
+
+.task-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.task-item {
+  background: #2a2a2a;
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: background-color 0.2s ease;
+}
+
+.task-item:hover {
+  background: #333333;
+}
+
+.task-item.completed {
+  background: #004d00;
+  color: #b0ffb0;
+}
+
+.task-info {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.task-metadata {
+  font-size: 1rem;
+  color: #bbbbbb; /* lighter gray, adjust as needed */
+  font-style: italic; /* optional */
+  margin-left: 6px;   /* space from task title */
+}
+
+.task-actions button {
+  min-width: 80px;
+  margin-left: 10px;
+}
+
+.button-secondary {
+  background-color: transparent;
+  border: 1.5px solid #00b5ad;
+  color: #00b5ad;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.button-secondary:hover {
+  background-color: #00b5ad;
+  color: #121212;
+}
+
+.button-danger {
+  background-color: transparent;
+  border: 1.5px solid #e05252;
+  color: #e05252;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.button-danger:hover {
+  background-color: #e05252;
+  color: #121212;
+}
+
+.status-text {
+  text-align: center;
+  font-style: italic;
+  color: #777777;
+  margin-top: 20px;
+}
+
+.task-manager {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px; /* space between heading and inputs */
+}
+
+.main-heading {
+  margin: 0 0 24px;
+  font-size: 2.8rem; /* Adjust as needed */
+  font-weight: 700;
+  text-align: center;
+  color: red;
+}
+
+.tab-button {
+  border: none;
+  padding: 5px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-right: 10px;
+}
+
+.tab-button.active {
+  background-color: #007bff;
+  color: white;
+}
+
+.tab-button.inactive {
+  background-color: #e0e0e0;
+  color: darkgrey;
+}
+
+.tab-buttons-container {
+  display: flex;
+  justify-content: center;
+  gap: 20px; /* space between buttons */
+  margin-top: 0px;
+  margin-bottom: -20px;
+}
+
+/* === pop‑up dialog styles === */
+.task-dialog-overlay {
+  position: fixed;
+  inset: 0;                               /* full‑screen */
+  background: rgba(0, 0, 0, 0.55);        /* dark transparent backdrop */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;                          /* sit on top of everything */
+}
+
+.task-dialog {
+  background: #2a2a2a;
+  padding: 24px 28px;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 420px;
+  box-shadow: 0 0 25px rgba(0, 181, 173, 0.35);
+}
+
+.task-dialog h4 {
+  margin-top: 0;
+}
+
+.dialog-field {
+  box-sizing: border-box;
+  width: 100%;
+  background: #222;
+  border: 1px solid #444;
+  color: #e0e0e0;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  resize: vertical;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.button-tertiary {
+  border: 1.5px solid #777;
+  background: transparent;
+  color: #aaa;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.button-tertiary:hover {
+  background: #555;
+  color: #eee;
+}
+
+.more-button {
+  min-width: auto;
+  width: auto;
+  padding: 6px 6px;
+  font-size: 1.2rem;
+  line-height: 1.2;
+  text-align: center;
+  border-radius: 6px;              
+  border: 1px solid #00b5ad;
+  background-color: transparent;    /* keep background transparent */
+  color: #00b5ad;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.more-button:hover {
+  background-color: #00b5ad;        /* teal background on hover */
+  color: #121212;                   /* dark text on hover */
+  border-color: #007b7b;            /* darker teal border */
+}
+
