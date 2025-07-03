@@ -10,10 +10,21 @@ import {
   query,
   orderBy,
   increment,
+  where,
 } from "firebase/firestore";
 import { db } from "../firebase";
 
-export default function TaskManager() {
+/* ───────── helper – efficiency score ───────── */
+function getEfficiencyScore(task) {
+  if (!task?.completed) return 0;
+  const hrs = (task.timeSpent || 0) / 3600;
+  if (hrs <= 0) return 100;
+  return Math.min(100, Math.round(100 / (1 + hrs)));
+}
+
+export default function TaskManager({ user }) {
+  if (!user) return null; // shouldn't render without a user
+
   const [tasks, setTasks] = useState([]);
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("School");
@@ -22,41 +33,47 @@ export default function TaskManager() {
   const [className, setClassName] = useState("");
   const [showCompleted, setShowCompleted] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [activeTask, setActiveTask] = useState(null); // the task being edited
+  const [activeTask, setActiveTask] = useState(null);
   const [notesDraft, setNotesDraft] = useState("");
-  const [linkDraft,  setLinkDraft]  = useState("");
+  const [linkDraft, setLinkDraft] = useState("");
+  const [manualMinutes, setManualMinutes] = useState("");
+  const [selectedForSync, setSelectedForSync] = useState({}); // {taskId: boolean}
 
-//Timer state
+  /* timer state */
   const [timerRunning, setTimerRunning] = useState(false);
-  const [timerStart, setTimerStart] = useState(null); // timestamp in ms
-  const [elapsedMs, setElapsedMs] = useState(0); // live display while running
+  const [timerStart, setTimerStart] = useState(null);
+  const [elapsedMs, setElapsedMs] = useState(0);
 
-//Firestone listener for tasks
   useEffect(() => {
-    const q = query(collection(db, "tasks"), orderBy("dueDate"));
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const tasksArr = [];
-      querySnapshot.forEach((doc) => {
-        tasksArr.push({ id: doc.id, ...doc.data() });
-      });
-      setTasks(tasksArr);
-    });
-    return () => unsubscribe();
-  }, []);
+    if (!user?.uid) return;
 
-//Live stopwatch timer
+    setLoading(true);
+
+    const q = query(
+      collection(db, "tasks"),
+      where("userId", "==", user.uid),
+      orderBy("dueDate")
+    );
+
+    const unsub = onSnapshot(q, (snap) => {
+      const arr = [];
+      snap.forEach((d) => arr.push({ id: d.id, ...d.data() }));
+      setTasks(arr);
+      setLoading(false);
+    });
+
+    return () => unsub();
+  }, [user?.uid]);
+
   useEffect(() => {
     if (!timerRunning) return;
-    const id = setInterval(() => {
-      setElapsedMs(Date.now() - timerStart);
-    }, 1000);
+    const id = setInterval(() => setElapsedMs(Date.now() - timerStart), 1000);
     return () => clearInterval(id);
   }, [timerRunning, timerStart]);
 
-     const addTask = async () => {
-     if (!title || !dueDate) return alert("Title and due date are required");
-
-    const newTask = {
+  const addTask = async () => {
+    if (!title || !dueDate) return alert("Title and due date are required");
+    await addDoc(collection(db, "tasks"), {
       title,
       category,
       dueDate: Timestamp.fromDate(new Date(dueDate)),
@@ -64,46 +81,33 @@ export default function TaskManager() {
       timeSpent: 0,
       className: category === "School" ? className : "",
       notes: "",
-      link: ""
-    };
-
-    await addDoc(collection(db, "tasks"), newTask);
-
+      link: "",
+      userId: user.uid,
+    });
     setTitle("");
     setDueDate("");
     setCategory("School");
     setClassName("");
   };
 
-  const toggleComplete = async (id, currentState) => {
-    const taskRef = doc(db, "tasks", id);
-    await updateDoc(taskRef, { completed: !currentState });
-  };
+  const toggleComplete = (id, cur) =>
+    updateDoc(doc(db, "tasks", id), { completed: !cur });
 
-  const deleteTask = async (id) => {
-    const taskRef = doc(db, "tasks", id);
-    await deleteDoc(taskRef);
-  };
+  const deleteTask = (id) => deleteDoc(doc(db, "tasks", id));
 
-//Timer helpers
   const startTimer = () => {
     if (timerRunning) return;
     setTimerStart(Date.now());
     setElapsedMs(0);
     setTimerRunning(true);
   };
+
   const stopTimer = async () => {
     if (!timerRunning || !activeTask) return;
-    const ms = Date.now() - timerStart;
-    const secs = Math.round(ms / 1000);
+    const secs = Math.round((Date.now() - timerStart) / 1000);
     setTimerRunning(false);
-
-    // Persist accumulated seconds atomically
-    const taskRef = doc(db, "tasks", activeTask.id);
-    await updateDoc(taskRef, { timeSpent: increment(secs) });
-
-    // Reflect locally so reopening dialog shows updated total
-    setActiveTask((prev) => (prev ? { ...prev, timeSpent: (prev.timeSpent || 0) + secs } : prev));
+    await updateDoc(doc(db, "tasks", activeTask.id), { timeSpent: increment(secs) });
+    setActiveTask((p) => (p ? { ...p, timeSpent: (p.timeSpent || 0) + secs } : p));
   };
 
   const openDiaglog = (task) => {
@@ -114,7 +118,6 @@ export default function TaskManager() {
     setTimerRunning(false);
     setElapsedMs(0);
   };
-
   const closeDialog = () => {
     setDialogOpen(false);
     setTimerRunning(false);
@@ -129,13 +132,30 @@ export default function TaskManager() {
     closeDialog();
   };
 
-  //Time formatting
-  const fmtHMS = (seconds) => new Date(seconds * 1000).toISOString().substr(11, 8);
+  const fmtHMS = (s) => new Date(s * 1000).toISOString().substr(11, 8);
+
+  /* Handle checkbox change */
+  const toggleSelectForSync = (taskId) => {
+    setSelectedForSync((prev) => ({
+      ...prev,
+      [taskId]: !prev[taskId],
+    }));
+  };
+
+  const syncSelectedTasks = () => {
+    const selectedTasks = tasks.filter((t) => selectedForSync[t.id]);
+    if (selectedTasks.length === 0) {
+      alert("No tasks selected for sync.");
+      return;
+    }
+    alert(`Syncing ${selectedTasks.length} task(s)...`);
+  };
 
   return (
     <div className="task-manager">
-      <h2 className="main-heading">Task Manager</h2>
+      <h2 className="main-heading">Task Wizard</h2>
 
+      {/* input row */}
       <div className="input-row">
         <input
           type="text"
@@ -152,7 +172,6 @@ export default function TaskManager() {
           <option value="School">School</option>
           <option value="Personal">Personal</option>
         </select>
-
         {category === "School" && (
           <input
             type="text"
@@ -162,7 +181,6 @@ export default function TaskManager() {
             className="input-text input-class"
           />
         )}
-
         <input
           type="date"
           value={dueDate}
@@ -170,10 +188,11 @@ export default function TaskManager() {
           className="input-date"
         />
         <button onClick={addTask} className="button-primary">
-          Add Test
+          Add Task
         </button>
       </div>
 
+      {/* tabs */}
       <div className="tab-buttons-container">
         <button
           onClick={() => setShowCompleted(false)}
@@ -191,6 +210,56 @@ export default function TaskManager() {
 
       <h3>{showCompleted ? "Completed Tasks" : "Current Tasks"}</h3>
 
+      {/* sync & select all container */}
+      <div
+        style={{
+          marginBottom: "12px",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          gap: "20px",
+          color: "#00b5ad",
+          fontWeight: "600",
+          userSelect: "none",
+        }}
+      >
+        <label style={{ fontSize: "0.9rem", cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            onChange={() => {
+              const visibleTasks = tasks.filter(
+                (t) => t.completed === showCompleted
+              );
+              const allSelected = visibleTasks.every(
+                (t) => selectedForSync[t.id]
+              );
+              const newSelected = { ...selectedForSync };
+              visibleTasks.forEach((t) => {
+                newSelected[t.id] = !allSelected;
+              });
+              setSelectedForSync(newSelected);
+            }}
+            checked={tasks
+              .filter((t) => t.completed === showCompleted)
+              .every((t) => selectedForSync[t.id])}
+          />{" "}
+          Select All Visible
+        </label>
+
+        <span
+          onClick={syncSelectedTasks}
+          style={{
+            fontSize: "0.85rem",
+            cursor: "pointer",
+            color: "#00b5ad",
+          }}
+          title="Sync selected tasks"
+        >
+          Sync Selected
+        </span>
+      </div>
+
+      {/* task list */}
       {loading ? (
         <p className="status-text">Loading tasks...</p>
       ) : tasks.length === 0 ? (
@@ -198,82 +267,160 @@ export default function TaskManager() {
       ) : (
         <ul className="task-list">
           {tasks
-            .filter((task) => task.completed === showCompleted)
-            .map((task) => (
-              <li
-                key={task.id}
-                className={`task-item ${task.completed ? "completed" : ""}`}
-              >
-                <div className="task-info">
-                  <strong>{task.title}</strong>{""}
-                  <span className="task-metadata ">
-                    {" "} - {task.category}
-                    {task.className && ` (${task.className})`} - Due:{" "} 
-                    {task.dueDate.toDate().toLocaleDateString("en-US", {
-                        year: "2-digit",
-                        month: "numeric",
-                        day: "numeric",
-                    })}
-                  </span>
-                </div>
-                <div className="task-actions">
-                  <button
-                    onClick={() => toggleComplete(task.id, task.completed)}
-                    className="button-secondary"
+            .filter((t) => t.completed === showCompleted)
+            .map((task) => {
+              const isOverdue = task.dueDate.toDate() < new Date() && !task.completed;
+              return (
+                <li
+                  key={task.id}
+                  className={`task-item ${task.completed ? "completed" : ""}`}
+                  style={{ alignItems: "center" }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={!!selectedForSync[task.id]}
+                    onChange={() => toggleSelectForSync(task.id)}
+                    style={{ marginRight: 8 }}
+                    title="Select for sync"
+                  />
+                  <div
+                    className="task-info"
+                    style={{
+                      flex: 1,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
                   >
-                    {task.completed ? "Undo" : "Complete"}
-                  </button>
-                  <button
-                    onClick={() => deleteTask(task.id)}
-                    className="button-danger"
-                  >
-                    Delete
-                  </button>
-                  <button
-                    onClick={() => openDiaglog(task)}
-                    className="button-secondary more-button"
+                    <strong>{task.title}</strong>
+                    <span className="task-metadata">
+                      {" "}
+                      - {task.category}
+                      {task.className && ` (${task.className})`}
+                      <span
+                        style={{ marginLeft: 12 }}
+                        className={`task-due-date ${isOverdue ? "overdue" : ""}`}
+                      >
+                        📅 {task.dueDate.toDate().toLocaleDateString("en-US")}
+                      </span>
+                    </span>
+                  </div>
+
+                  <div className="task-actions">
+                    <button
+                      onClick={() => toggleComplete(task.id, task.completed)}
+                      className="button-secondary"
                     >
-                    ...
+                      {task.completed ? "Undo" : "Complete"}
                     </button>
-                </div>
-              </li>
-            ))}
+                    <button
+                      onClick={() => deleteTask(task.id)}
+                      className="button-danger"
+                    >
+                      Delete
+                    </button>
+                    <button
+                      onClick={() => openDiaglog(task)}
+                      className="button-secondary more-button"
+                    >
+                      ...
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
         </ul>
       )}
 
-{dialogOpen && (
-  <div className="task-dialog-overlay" onClick={closeDialog}>
-    <div className="task-dialog" onClick={(e) => e.stopPropagation()}>
-      <h4>Edit details</h4>
+      {/* popup dialog */}
+      {dialogOpen && (
+        <div className="task-dialog-overlay" onClick={closeDialog}>
+          <div className="task-dialog" onClick={(e) => e.stopPropagation()}>
+            <h4>Edit details</h4>
 
-      <textarea
-        className="dialog-field"
-        rows="4"
-        placeholder="Notes / description"
-        value={notesDraft}
-        onChange={(e) => setNotesDraft(e.target.value)}
-      />
+            <textarea
+              className="dialog-field"
+              rows="4"
+              placeholder="Notes / description"
+              value={notesDraft}
+              onChange={(e) => setNotesDraft(e.target.value)}
+            />
 
-      <input
-        className="dialog-field"
-        type="url"
-        placeholder="Reference link (https://...)"
-        value={linkDraft}
-        onChange={(e) => setLinkDraft(e.target.value)}
-      />
-    
-    <div className="timer-section">
+            <input
+              className="dialog-field"
+              type="url"
+              placeholder="Reference link (https://...)"
+              value={linkDraft}
+              onChange={(e) => setLinkDraft(e.target.value)}
+            />
+
+            {/* timer block */}
+            <div className="timer-section">
+              <div className="timer-display">
+                Current Time:&nbsp;
+                {new Date(elapsedMs).toISOString().substr(11, 8)}
+              </div>
+              {activeTask?.timeSpent !== undefined && (
+                <div className="total-time">
+                  Total Time: {fmtHMS(activeTask.timeSpent || 0)}
+                </div>
+              )}
               <button
                 type="button"
                 onClick={timerRunning ? stopTimer : startTimer}
-                className={`button-secondary ${timerRunning ? "stop-btn" : "start-btn"}`}
+                className={`button-secondary ${
+                  timerRunning ? "stop-btn" : "start-btn"
+                }`}
+                style={{ marginTop: 12 }}
               >
                 {timerRunning ? "Stop" : "Start"}
               </button>
-              <div className="timer-display">Current Time: {new Date(elapsedMs).toISOString().substr(11, 8)}</div>
-              {activeTask?.timeSpent !== undefined && (
-                <div className="total-time">Total Time: {fmtHMS(activeTask.timeSpent || 0)}</div>
-              )}
+            </div>
+
+            {/* manual time entry */}
+            <div className="manual-time-section">
+              <h5 style={{ marginBottom: 8 }}>Manual Time Entry</h5>
+              <input
+                type="number"
+                placeholder="Mins"
+                className="dialog-field manual-time-input"
+                value={manualMinutes}
+                onChange={(e) => setManualMinutes(e.target.value)}
+              />
+              <div className="manual-buttons">
+                <button
+                  className="button-secondary"
+                  onClick={async () => {
+                    if (!activeTask || isNaN(Number(manualMinutes))) return;
+                    const secs = Math.round(Number(manualMinutes) * 60);
+                    const newTime = Math.max(
+                      0,
+                      (activeTask.timeSpent || 0) + secs
+                    );
+                    await updateDoc(doc(db, "tasks", activeTask.id), {
+                      timeSpent: newTime,
+                    });
+                    setActiveTask({ ...activeTask, timeSpent: newTime });
+                    setManualMinutes("");
+                  }}
+                >
+                  Add/Subtract
+                </button>
+                <button
+                  className="button-secondary"
+                  onClick={async () => {
+                    if (!activeTask || isNaN(Number(manualMinutes))) return;
+                    const secs = Math.max(0, Math.round(Number(manualMinutes) * 60));
+                    await updateDoc(doc(db, "tasks", activeTask.id), {
+                      timeSpent: secs,
+                    });
+                    setActiveTask({ ...activeTask, timeSpent: secs });
+                    setManualMinutes("");
+                  }}
+                >
+                  Set Time
+                </button>
+              </div>
             </div>
 
             <div className="dialog-actions">

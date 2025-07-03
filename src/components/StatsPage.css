@@ -1,0 +1,20 @@
+.stats-container {
+    max-width: 600px;
+    margin: 2rem auto;
+    padding: 1.5rem;
+    background-color: #1e1e1e;
+    border-radius: 10px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.3);
+    color: #f1f1f1;
+  }
+  
+  .stats-list {
+    list-style-type: none;
+    padding-left: 0;
+    line-height: 1.8;
+  }
+  
+  .stats-list li {
+    margin-bottom: 0.5rem;
+  }
+  

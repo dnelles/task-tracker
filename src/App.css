@@ -92,6 +92,18 @@ body {
   border-color: #00b5ad;
 }
 
+.task-due-date {
+  font-size: 0.85rem;
+  color: #bbbbbb;
+  margin-left: 10px;
+  white-space: nowrap;
+}
+
+.task-due-date.overdue {
+  color: #ff6b6b;
+  font-weight: 600;
+}
+
 .button-primary {
   background-color: #00b5ad;
   border: none;
@@ -117,12 +129,13 @@ body {
 .task-item {
   background: #2a2a2a;
   border-radius: 8px;
-  padding: 16px 20px;
-  margin-bottom: 14px;
+  padding: 4px 12px 4px 8px;
+  margin-bottom: 8px; /* ↓ smaller spacing between tasks */
   display: flex;
   justify-content: space-between;
   align-items: center;
   transition: background-color 0.2s ease;
+  font-size: 0.95rem; /* ↓ slightly smaller font */
 }
 
 .task-item:hover {
@@ -149,8 +162,12 @@ body {
 }
 
 .task-actions button {
-  min-width: 80px;
+  min-width: 35px;
+  font-size: 0.80rem;
+  padding: 6px 10px;
   margin-left: 10px;
+  margin-top: 6px;
+  margin-bottom: 6px;
 }
 
 .button-secondary {
@@ -161,6 +178,7 @@ body {
   border-radius: 6px;
   cursor: pointer;
   font-weight: 600;
+  margin-bottom: 12px;
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
@@ -205,6 +223,10 @@ body {
   font-weight: 700;
   text-align: center;
   color: red;
+}
+
+.task-manager > h3 {
+  margin-bottom: 0px;
 }
 
 .tab-button {
@@ -290,17 +312,9 @@ body {
 }
 
 .more-button {
-  min-width: auto;
-  width: auto;
-  padding: 6px 6px;
-  font-size: 1.2rem;
-  line-height: 1.2;
-  text-align: center;
-  border-radius: 6px;              
   border: 1px solid #00b5ad;
-  background-color: transparent;    /* keep background transparent */
+  background-color: transparent;
   color: #00b5ad;
-  font-weight: 700;
   cursor: pointer;
   transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
@@ -311,3 +325,123 @@ body {
   border-color: #007b7b;            /* darker teal border */
 }
 
+/*Navigation Bar */
+.nav-bar {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.nav-link {
+  color: #00b5ad;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+.nav-link:hover {
+  color: #007b7b;
+  text-decoration: underline;
+}
+
+.logout-link {
+  color: #00b5ad;             /* match nav-link color */
+  font-weight: bold;          /* match nav-link */
+  cursor: pointer;            /* pointer cursor on hover */
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 4px;             /* small horizontal padding */
+  transition: color 0.2s ease;
+}
+
+.logout-link:hover {
+  color: #007b7b;             /* slightly darker teal on hover */
+  text-decoration: underline;
+}
+
+/* Efficiency Scoring */
+.efficiency-score {
+  margin-top: 6px;
+  font-weight: 600;
+  color: #00b5ad;
+}
+
+/* === Manual Time Entry and Timer Buttons Styling Updates === */
+
+.manual-time-section h5 {
+  margin-top: 12px;
+  margin-bottom: 10px;
+  font-size: 0.9rem;
+}
+
+.manual-time-section input.dialog-field {
+  width: 85px;       /* smaller width */
+  min-width: 70px;   /* prevent too small on small screens */
+}
+
+.manual-time-input {
+  width: 80px;
+  text-align: center;
+}
+
+/* Space between Add/Subtract and Set Time buttons */
+.manual-buttons button + button {
+  margin-left: 10px;
+}
+
+/* Extra bottom padding below timer and manual time buttons */
+.timer-section button,
+.manual-buttons button {
+  padding-top: 5px;
+  padding-bottom: 5px;
+  padding-right: 7px;
+  padding-left: 7px;
+}
+
+/* Authentication login/signup page */
+.auth-form {
+  max-width: 320px;
+  margin: 50px auto;
+  padding: 24px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background-color: #2a2a2a;
+  box-shadow: 0 0 25px rgba(0, 181, 173, 0.35);
+  text-align: center;
+}
+
+.auth-form input.input-text {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  margin-bottom: 16px;  /* Space between inputs */
+  font-size: 16px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.auth-form button.button-primary {
+  width: 100%;
+  padding: 12px 0;
+  margin-top: 12px;  /* Space above the submit button */
+  font-size: 16px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.auth-form p {
+  margin-top: 16px;
+}
+
+.auth-form button.button-tertiary {
+  background: none;
+  border: none;
+  color: #007bff;
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0;
+  margin-left: 8px;
+}
