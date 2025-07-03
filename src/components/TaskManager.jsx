@@ -170,7 +170,7 @@ export default function TaskManager() {
           className="input-date"
         />
         <button onClick={addTask} className="button-primary">
-          Add Task
+          Add Test
         </button>
       </div>
 
