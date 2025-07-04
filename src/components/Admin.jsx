@@ -1,4 +1,3 @@
-// src/components/AdminPage.jsx
 import React, { useEffect, useState } from "react";
 import {
   collection,
@@ -10,139 +9,134 @@ import {
 import { db } from "../firebase";
 
 export default function AdminPage() {
-  const [grouped, setGrouped] = useState({});
-  const [userProfiles, setUserProfiles] = useState({});
+  const [users, setUsers] = useState([]);
+  const [tasksByUser, setTasksByUser] = useState({});
   const [expandedUid, setExpandedUid] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  /* ── fetch user profiles ───────────── */
   useEffect(() => {
+    // Load all users
     const fetchUsers = async () => {
       const snap = await getDocs(collection(db, "users"));
-      const map = {};
-      snap.forEach(doc => map[doc.id] = doc.data());
-      setUserProfiles(map);
-    };
-    fetchUsers();
-  }, []);
-
-  /* ── fetch ALL tasks once, group by userId ─────────────── */
-  useEffect(() => {
-    const q = query(collection(db, "tasks"), orderBy("dueDate"));
-    const unsub = onSnapshot(q, snap => {
-      const byUser = {};
+      const userList = [];
       snap.forEach(doc => {
-        const data = { id: doc.id, ...doc.data() };
-        const uid  = data.userId || "unknown";
-        if (!byUser[uid]) byUser[uid] = [];
-        byUser[uid].push(data);
+        userList.push({ uid: doc.id, ...doc.data() });
       });
-      setGrouped(byUser);
-      setLoading(false);
-    });
-    return () => unsub();
+      setUsers(userList);
+    };
+
+    // Load all tasks and group by userId
+    const unsubTasks = onSnapshot(
+      query(collection(db, "tasks"), orderBy("dueDate")),
+      snap => {
+        const grouped = {};
+        snap.forEach(doc => {
+          const data = { id: doc.id, ...doc.data() };
+          const uid = data.userId || "unknown";
+          if (!grouped[uid]) grouped[uid] = [];
+          grouped[uid].push(data);
+        });
+        setTasksByUser(grouped);
+        setLoading(false);
+      }
+    );
+
+    fetchUsers();
+
+    return () => unsubTasks(); // cleanup
   }, []);
 
-  /* ── helper to format date ─────────── */
   const fmtDate = ts =>
     ts?.toDate().toLocaleDateString("en-US", {
-      month:"short", day:"numeric", year:"numeric"
+      month: "short",
+      day: "numeric",
+      year: "numeric",
     });
 
-  if (loading) return <p className="status-text">Loading all users…</p>;
-
-  const userUids = Object.keys(grouped).sort();
+  if (loading) return <p className="status-text">Loading users…</p>;
 
   return (
     <div className="admin-container">
-      <h2 className="main-heading">Admin – All Users</h2>
+      <h2 className="main-heading">Admin – All Users</h2>
 
-      {userUids.length === 0 ? (
-        <p className="status-text">No task data yet.</p>
-      ) : (
-        userUids.map(uid => {
-          const tasks = grouped[uid];
-          const current  = tasks.filter(t => !t.completed);
-          const complete = tasks.filter(t =>  t.completed);
+      {users.map(user => {
+        const uid = user.uid;
+        const tasks = tasksByUser[uid] || [];
+        const current = tasks.filter(t => !t.completed);
+        const complete = tasks.filter(t => t.completed);
+        const fullName = `${user.firstName || "?"} ${user.lastName || ""}`.trim();
+        const totalSeconds = tasks.reduce((sum, t) => sum + (t.timeSpent || 0), 0);
+        const formatTime = secs => new Date(secs * 1000).toISOString().substr(11, 8);
+        const formattedTime = formatTime(totalSeconds);
 
-          const profile = userProfiles[uid];
-          const displayName = profile
-            ? `${profile.firstName || "?"} ${profile.lastName || "?"} (${profile.email})`
-            : uid;
-
-          return (
+        return (
+          <div
+            key={uid}
+            className="card"
+            style={{ marginBottom: 20, width: "100%", textAlign: "left" }}
+          >
             <div
-              key={uid}
-              className="card"
-              style={{ marginBottom: 20, width: "100%", textAlign: "left" }}
+              style={{ cursor: "pointer", display: "flex", justifyContent: "space-between" }}
+              onClick={() => setExpandedUid(expandedUid === uid ? null : uid)}
             >
-              {/* header / toggle */}
-              <div
-                style={{ cursor:"pointer", display:"flex", justifyContent:"space-between" }}
-                onClick={() => setExpandedUid(expandedUid === uid ? null : uid)}
-              >
-                <strong>{displayName}</strong>
-                <span>{expandedUid === uid ? "▲" : "▼"}</span>
-              </div>
-
-              {/* body */}
-              {expandedUid === uid && (
-                <div style={{ marginTop: 12 }}>
-                  {/* CURRENT */}
-                  <h4 style={{ margin: "6px 0" }}>
-                    Current Tasks ({current.length})
-                  </h4>
-                  {current.length === 0 ? (
-                    <p className="status-text">None</p>
-                  ) : (
-                    <ul className="task-list">
-                      {current.map(t => (
-                        <li key={t.id} className="task-item">
-                          <div className="task-info">
-                            <strong>{t.title}</strong>
-                            <span className="task-metadata">
-                              {" "}– {t.category}
-                              {t.className && ` (${t.className})`}
-                              <span className="task-due-date" style={{ marginLeft: 12 }}>
-                                📅 {fmtDate(t.dueDate)}
-                              </span>
-                            </span>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-
-                  {/* COMPLETED */}
-                  <h4 style={{ margin: "14px 0 6px" }}>
-                    Completed Tasks ({complete.length})
-                  </h4>
-                  {complete.length === 0 ? (
-                    <p className="status-text">None</p>
-                  ) : (
-                    <ul className="task-list">
-                      {complete.map(t => (
-                        <li key={t.id} className="task-item completed">
-                          <div className="task-info">
-                            <strong>{t.title}</strong>
-                            <span className="task-metadata">
-                              {" "}– {t.category}
-                              {t.className && ` (${t.className})`}
-                              <span className="task-due-date" style={{ marginLeft: 12 }}>
-                                📅 {fmtDate(t.dueDate)}
-                              </span>
-                            </span>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              )}
+              <strong>
+                {fullName || user.email || uid}
+                <span style={{ fontWeight: 400, fontSize: "0.85rem", marginLeft: 8, color: "#888" }}>
+                    ⏱ {formattedTime}
+                </span>
+            </strong>
             </div>
-          );
-        })
-      )}
+
+            {expandedUid === uid && (
+              <div style={{ marginTop: 12 }}>
+                <h4 style={{ margin: "6px 0" }}>Current Tasks ({current.length})</h4>
+                {current.length === 0 ? (
+                  <p className="status-text">None</p>
+                ) : (
+                  <ul className="task-list">
+                    {current.map(t => (
+                      <li key={t.id} className="task-item">
+                        <div className="task-info">
+                          <strong>{t.title}</strong>
+                          <span className="task-metadata">
+                            {" "}– {t.category}
+                            {t.className && ` (${t.className})`}
+                            <span className="task-due-date" style={{ marginLeft: 12 }}>
+                              📅 {fmtDate(t.dueDate)}
+                            </span>
+                          </span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <h4 style={{ margin: "14px 0 6px" }}>Completed Tasks ({complete.length})</h4>
+                {complete.length === 0 ? (
+                  <p className="status-text">None</p>
+                ) : (
+                  <ul className="task-list">
+                    {complete.map(t => (
+                      <li key={t.id} className="task-item completed">
+                        <div className="task-info">
+                          <strong>{t.title}</strong>
+                          <span className="task-metadata">
+                            {" "}– {t.category}
+                            {t.className && ` (${t.className})`}
+                            <span className="task-due-date" style={{ marginLeft: 12 }}>
+                              📅 {fmtDate(t.dueDate)}
+                            </span>
+                          </span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
