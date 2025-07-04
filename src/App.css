@@ -325,6 +325,13 @@ body {
   border-color: #007b7b;            /* darker teal border */
 }
 
+/* Admin Page */
+.admin-container {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
 /*Navigation Bar */
 .nav-bar {
   display: flex;

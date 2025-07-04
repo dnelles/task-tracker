@@ -528,7 +528,7 @@ const endStr = new Date(
                     setManualMinutes("");
                   }}
                 >
-                  Add/Subtract
+                  Add
                 </button>
                 <button
                   className="button-secondary"
@@ -540,7 +540,7 @@ const endStr = new Date(
                     setManualMinutes("");
                   }}
                 >
-                  Set Time
+                  Set
                 </button>
               </div>
             </div>
