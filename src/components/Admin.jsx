@@ -8,7 +8,11 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 
-export default function AdminPage() {
+export default function AdminPage({
+  onImpersonate,       // function passed from App to trigger impersonation
+  stopImpersonate,     // function to stop impersonating
+  impersonatedUid      // uid of currently impersonated user or null
+}) {
   const [users, setUsers] = useState([]);
   const [tasksByUser, setTasksByUser] = useState({});
   const [expandedUid, setExpandedUid] = useState(null);
@@ -76,15 +80,35 @@ export default function AdminPage() {
             style={{ marginBottom: 20, width: "100%", textAlign: "left" }}
           >
             <div
-              style={{ cursor: "pointer", display: "flex", justifyContent: "space-between" }}
+              style={{ cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}
               onClick={() => setExpandedUid(expandedUid === uid ? null : uid)}
             >
               <strong>
                 {fullName || user.email || uid}
                 <span style={{ fontWeight: 400, fontSize: "0.85rem", marginLeft: 8, color: "#888" }}>
-                    ⏱ {formattedTime}
+                  ⏱ {formattedTime}
                 </span>
-            </strong>
+              </strong>
+
+              {/* Impersonation controls */}
+              <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+                {impersonatedUid === uid ? (
+                  <button className="button-secondary" onClick={stopImpersonate}>
+                    ⏹ Stop impersonating
+                  </button>
+                ) : (
+                  <button
+                    className="button-primary"
+                    onClick={e => {
+                      e.stopPropagation(); // prevent toggle expand
+                      onImpersonate(user);
+                    }}
+                    style={{ fontSize: "0.85rem" }}
+                  >
+                    🕵️ Act as this user
+                  </button>
+                )}
+              </div>
             </div>
 
             {expandedUid === uid && (
@@ -102,7 +126,7 @@ export default function AdminPage() {
                             {" "}– {t.category}
                             {t.className && ` (${t.className})`}
                             <span className="task-due-date" style={{ marginLeft: 12 }}>
-                              📅 {fmtDate(t.dueDate)}
+                              📅 {fmtDate(t.dueDate)}
                             </span>
                           </span>
                         </div>
@@ -124,7 +148,7 @@ export default function AdminPage() {
                             {" "}– {t.category}
                             {t.className && ` (${t.className})`}
                             <span className="task-due-date" style={{ marginLeft: 12 }}>
-                              📅 {fmtDate(t.dueDate)}
+                              📅 {fmtDate(t.dueDate)}
                             </span>
                           </span>
                         </div>

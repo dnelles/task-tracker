@@ -15,419 +15,385 @@ import {
 import { useGoogleLogin } from "@react-oauth/google";
 import { db } from "../firebase";
 
-/* ───── helper – efficiency score (unused in UI for now) ───── */
-function getEfficiencyScore(task) {
-  if (!task?.completed) return 0;
-  const hrs = (task.timeSpent || 0) / 3600;
-  if (hrs <= 0) return 100;
-  return Math.min(100, Math.round(100 / (1 + hrs)));
-}
+export default function TaskManager({ user, isImpersonating = false }) {
+  if (!user) return null; // ── guard for unauthenticated render
+  /* ─────────────────────────────────── state ────────────────────────────────── */
+  const [tasks, setTasks] = useState([]);
+  const [title, setTitle] = useState("");
+  const [category, setCategory] = useState("School");
+  const [dueDate, setDueDate] = useState("");
+  const [className, setClassName] = useState("");
 
-export default function TaskManager({ user }) {
-  if (!user) return null; // guard
-
-  /* ── state ─────────────────────────────────────────────── */
-  const [tasks, setTasks]               = useState([]);
-  const [title, setTitle]               = useState("");
-  const [category, setCategory]         = useState("School");
-  const [dueDate, setDueDate]           = useState("");
-  const [className, setClassName]       = useState("");
-
-  const [loading, setLoading]           = useState(false);
+  const [loading, setLoading] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
 
-  const [dialogOpen, setDialogOpen]     = useState(false);
-  const [activeTask, setActiveTask]     = useState(null);
-  const [notesDraft, setNotesDraft]     = useState("");
-  const [linkDraft, setLinkDraft]       = useState("");
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [activeTask, setActiveTask] = useState(null);
+  const [notesDraft, setNotesDraft] = useState("");
+  const [linkDraft, setLinkDraft] = useState("");
+  const [dueDateDraft, setDueDateDraft] = useState("");
   const [manualMinutes, setManualMinutes] = useState("");
 
   const [selectedForSync, setSelectedForSync] = useState({});
-  const [accessToken, setAccessToken]   = useState(null);
-  const [isSyncing, setIsSyncing]       = useState(false);
+  const [accessToken, setAccessToken] = useState(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
-  /* timer state */
+  /* stopwatch */
   const [timerRunning, setTimerRunning] = useState(false);
-  const [timerStart, setTimerStart]     = useState(null);
-  const [elapsedMs, setElapsedMs]       = useState(0);
+  const [timerStart, setTimerStart] = useState(null);
+  const [elapsedMs, setElapsedMs] = useState(0);
 
-  /* ── Firestore listener (per user) ─────────────────────── */
+  /* Time Log popup */
+  const [showTimeLogPopup, setShowTimeLogPopup] = useState(false);
+
+  /* ─────────────────────────────── load saved Tasks token ──────────────────── */
+  const userId = user.uid;
   useEffect(() => {
-    if (!user?.uid) return;
-    setLoading(true);
+    const tok = localStorage.getItem(`google_access_token_${userId}`);
+    setAccessToken(tok || null);
+  }, [userId]);
 
+  /* ─────────────────────────────── Firestore listener ──────────────────────── */
+  useEffect(() => {
+    if (!userId) return;
+    setLoading(true);
     const q = query(
       collection(db, "tasks"),
-      where("userId", "==", user.uid),
+      where("userId", "==", userId),
       orderBy("dueDate")
     );
-
-    const unsub = onSnapshot(q, snap => {
+    const unsub = onSnapshot(q, (snap) => {
       const arr = [];
-      snap.forEach(d => arr.push({ id: d.id, ...d.data() }));
+      snap.forEach((d) => arr.push({ id: d.id, ...d.data() }));
       setTasks(arr);
       setLoading(false);
     });
-
     return () => unsub();
-  }, [user?.uid]);
+  }, [userId]);
 
-  /* live stopwatch for timer */
+  /* stopwatch tick */
   useEffect(() => {
     if (!timerRunning) return;
-    const id = setInterval(
-      () => setElapsedMs(Date.now() - timerStart),
-      1000
-    );
+    const id = setInterval(() => setElapsedMs(Date.now() - timerStart), 1000);
     return () => clearInterval(id);
   }, [timerRunning, timerStart]);
 
-const userId = user?.uid || null;
-useEffect(() => {
-  if (!userId) return;
-  const token = localStorage.getItem(`google_access_token_${userId}`);
-  if (token) setAccessToken(token);
-  else setAccessToken(null);
-}, [userId]);
-
-  
+  /* ─────────────────────────────── Google Tasks OAuth ─────────────────────── */
   const loginWithGoogle = useGoogleLogin({
-    scope: "https://www.googleapis.com/auth/calendar.events",
-    onSuccess: (tok) => {
-      setAccessToken(tok.access_token);
-      localStorage.setItem(`google_access_token_${user.uid}`, tok.access_token);
+    scope: "https://www.googleapis.com/auth/tasks",
+    onSuccess: ({ access_token }) => {
+      setAccessToken(access_token);
+      localStorage.setItem(`google_access_token_${userId}`, access_token);
     },
-    onError: () => alert("Google Calendar connection failed"),
+    onError: () => alert("Google Tasks connection failed"),
   });
-  
+
   const disconnectGoogle = () => {
     setAccessToken(null);
-    localStorage.removeItem(`google_access_token_${user.uid}`);
-  };  
+    localStorage.removeItem(`google_access_token_${userId}`);
+  };
 
-  /* ── Google Calendar helper – create one event ────────── */
-  async function createCalendarEvent(task) {
-    if (!accessToken) throw new Error("Missing Google token");
-
-    // default whole-day event on dueDate
-    const startDate = task.dueDate.toDate();
-    const startStr = new Date(
-      startDate.getFullYear(),
-      startDate.getMonth(),
-      startDate.getDate()
-).toISOString().split("T")[0];
-const endDate = new Date(startDate);
-endDate.setDate(endDate.getDate() + 1);
-const endStr = new Date(
-  endDate.getFullYear(),
-  endDate.getMonth(),
-  endDate.getDate()
-).toISOString().split("T")[0];
-    const res = await fetch(
-      "https://www.googleapis.com/calendar/v3/calendars/primary/events",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(event),
-      }
-    );
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error?.message || "Calendar API error");
-    }
-    return await res.json();
-  }
-
-  /* ── CRUD helpers for tasks ───────────────────────────── */
+  /* ─────────────────────────────── task CRUD helpers ──────────────────────── */
   const addTask = async () => {
     if (!title || !dueDate) return alert("Title and due date are required");
+    const [y, m, d] = dueDate.split("-").map(Number);
+    const localDate = new Date(y, m - 1, d); // midnight local
     await addDoc(collection(db, "tasks"), {
       title,
       category,
-      dueDate: Timestamp.fromDate(new Date(dueDate)),
+      dueDate: Timestamp.fromDate(localDate),
       completed: false,
       timeSpent: 0,
       className: category === "School" ? className : "",
       notes: "",
       link: "",
-      userId: user.uid,
+      userId,
+      timeLogs: [], // initialize empty time log array
     });
-    setTitle(""); setDueDate(""); setCategory("School"); setClassName("");
+    setTitle("");
+    setDueDate("");
+    setCategory("School");
+    setClassName("");
   };
 
   const toggleComplete = (id, cur) =>
     updateDoc(doc(db, "tasks", id), { completed: !cur });
 
-  const deleteTask = id => deleteDoc(doc(db, "tasks", id));
+  const deleteTask = (id) => deleteDoc(doc(db, "tasks", id));
 
-  /* timer helpers */
-  const startTimer = () => {
+  /* stopwatch handlers */
+  const startTimer = async () => {
     if (timerRunning) return;
     setTimerStart(Date.now());
     setElapsedMs(0);
     setTimerRunning(true);
+
+    // Add time log entry for start
+    if (activeTask) {
+      const logEntry = {
+        timestamp: Timestamp.now(),
+        action: "start",
+      };
+      await updateDoc(doc(db, "tasks", activeTask.id), {
+        timeLogs: [...(activeTask.timeLogs || []), logEntry],
+      });
+      setActiveTask((p) =>
+        p ? { ...p, timeLogs: [...(p.timeLogs || []), logEntry] } : p
+      );
+    }
   };
   const stopTimer = async () => {
     if (!timerRunning || !activeTask) return;
     const secs = Math.round((Date.now() - timerStart) / 1000);
     setTimerRunning(false);
-    await updateDoc(doc(db, "tasks", activeTask.id), { timeSpent: increment(secs) });
-    setActiveTask(p => p ? { ...p, timeSpent: (p.timeSpent || 0) + secs } : p);
+    await updateDoc(doc(db, "tasks", activeTask.id), {
+      timeSpent: increment(secs),
+    });
+    // Add time log entry for stop
+    const logEntry = {
+      timestamp: Timestamp.now(),
+      action: "stop",
+      duration: secs,
+    };
+    await updateDoc(doc(db, "tasks", activeTask.id), {
+      timeLogs: [...(activeTask.timeLogs || []), logEntry],
+    });
+    setActiveTask((p) =>
+      p
+        ? {
+            ...p,
+            timeSpent: (p.timeSpent || 0) + secs,
+            timeLogs: [...(p.timeLogs || []), logEntry],
+          }
+        : p
+    );
   };
 
-  /* dialog helpers */
-  const openDiaglog = task => {
+  /* ───────────────────────── dialog helpers ──────────────────────────────── */
+  const openDiaglog = (task) => {
     setActiveTask(task);
     setNotesDraft(task.notes || "");
     setLinkDraft(task.link || "");
+
+    // pre‑fill due‑date ISO yyyy‑mm‑dd
+    setDueDateDraft(task.dueDate.toDate().toISOString().split("T")[0]);
+
     setDialogOpen(true);
     setTimerRunning(false);
     setElapsedMs(0);
+    setShowTimeLogPopup(false);
   };
-  const closeDialog = () => { setDialogOpen(false); setTimerRunning(false); };
+  const closeDialog = () => {
+    setDialogOpen(false);
+    setTimerRunning(false);
+    setShowTimeLogPopup(false);
+  };
 
   const saveDialog = async () => {
     if (!activeTask) return;
+
+    // convert local yyyy‑mm‑dd to Date (midnight local)
+    const [y, m, d] = dueDateDraft.split("-").map(Number);
+    const localDate = new Date(y, m - 1, d);
+
     await updateDoc(doc(db, "tasks", activeTask.id), {
       notes: notesDraft,
-      link : linkDraft.trim(),
+      link: linkDraft.trim(),
+      dueDate: Timestamp.fromDate(localDate),
     });
     closeDialog();
   };
 
-  /* utilities */
-  const fmtHMS = s => new Date(s * 1000).toISOString().substr(11, 8);
-
-  /* checkbox & sync helpers */
-  const toggleSelectForSync = id =>
-    setSelectedForSync(prev => ({ ...prev, [id]: !prev[id] }));
+  /* ───────────────────────── Google Tasks sync selected ───────────────────── */
+  const toggleSelectForSync = (id) =>
+    setSelectedForSync((p) => ({ ...p, [id]: !p[id] }));
 
   const syncSelectedTasks = async () => {
     const sel = tasks.filter((t) => selectedForSync[t.id]);
-    if (sel.length === 0) {
-      alert("No tasks selected to sync.");
-      return;
-    }
-    if (!accessToken) {
-      alert("Connect Google Calendar first.");
-      return;
-    }
-  
-    for (const task of sel) {
-      const startDate = task.dueDate.toDate();
-      const endDate = new Date(startDate);
-      endDate.setDate(endDate.getDate() + 1); // Google Calendar end is exclusive
-    
-      const startStr = new Date(
-        startDate.getFullYear(),
-        startDate.getMonth(),
-        startDate.getDate()
-      ).toISOString().split("T")[0];
-    
-      const endStr = new Date(
-        endDate.getFullYear(),
-        endDate.getMonth(),
-        endDate.getDate()
-      ).toISOString().split("T")[0];
-    
-      const event = {
-        summary: `Due: ${task.title}`,
-        description: task.notes || "",
-        start: { date: startStr },
-        end: { date: endStr },
-        reminders: {
-          useDefault: false,
-          overrides: [
-            { method: "popup", minutes: 960 }, // Notification reminder 8am the day before
-          ],
-        },
-      };      
-    
-      try {
+    if (!accessToken) return alert("Connect Google Tasks first");
+    if (sel.length === 0) return alert("No tasks selected");
+
+    setIsSyncing(true);
+    try {
+      for (const t of sel) {
+        const body = {
+          title: `Due: ${t.title}`,
+          notes: t.notes || "",
+          due: t.dueDate.toDate().toISOString(), // RFC 3339
+        };
         const res = await fetch(
-          "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+          "https://tasks.googleapis.com/tasks/v1/lists/@default/tasks",
           {
             method: "POST",
             headers: {
               Authorization: `Bearer ${accessToken}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify(event),
+            body: JSON.stringify(body),
           }
         );
-    
         const data = await res.json();
-        console.log("Event sync response:", data);
-    
-        if (res.ok) {
-          alert(`Synced: ${task.title}`);
-        } else {
+        if (!res.ok) {
           console.error("Sync error:", data);
-          alert(`Failed to sync: ${task.title}\nReason: ${data.error?.message || "Unknown error"}`);
+          alert(`Failed: ${t.title}\n${data.error?.message}`);
         }
-      } catch (err) {
-        console.error("Fetch error:", err);
-        alert(`Error syncing: ${task.title}`);
       }
-    }    
-  };  
+    } catch (err) {
+      console.error(err);
+      alert("Sync failed (network or auth error).");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
-  /* ── UI ─────────────────────────────────────────────── */
+  /* ─────────────────────────────── helpers ──────────────────────────────── */
+  const fmtHMS = (s) => new Date(s * 1000).toISOString().substr(11, 8);
+
+  /* ─────────────────────────────── UI below ─────────────────────────────── */
   return (
     <div className="task-manager">
+      {isImpersonating && (
+        <div
+          style={{
+            backgroundColor: "#fff4e5",
+            padding: "8px 12px",
+            borderRadius: 4,
+            color: "#a67c00",
+            marginBottom: 20,
+            fontWeight: "bold",
+            border: "1px solid #a67c00",
+            userSelect: "none",
+          }}
+        >
+          ⚠️ You are impersonating: {user.email || user.uid}
+        </div>
+      )}
       <h2 className="main-heading">Task Wizard</h2>
 
-      {/* ───── input row ───── */}
+      {/* ── input row ───────────────── */}
       <div className="input-row">
         <input
           type="text"
+          className="input-text input-title"
           placeholder="Task title"
           value={title}
-          onChange={e => setTitle(e.target.value)}
-          className="input-text input-title"
+          onChange={(e) => setTitle(e.target.value)}
         />
+
         <select
           value={category}
-          onChange={e => setCategory(e.target.value)}
+          onChange={(e) => setCategory(e.target.value)}
           className="input-select"
         >
           <option value="School">School</option>
           <option value="Personal">Personal</option>
         </select>
+
         {category === "School" && (
           <input
             type="text"
+            className="input-text input-class"
             placeholder="Class"
             value={className}
-            onChange={e => setClassName(e.target.value)}
-            className="input-text input-class"
+            onChange={(e) => setClassName(e.target.value)}
           />
         )}
+
         <input
           type="date"
-          value={dueDate}
-          onChange={e => setDueDate(e.target.value)}
           className="input-date"
+          value={dueDate}
+          onChange={(e) => setDueDate(e.target.value)}
         />
-        <button onClick={addTask} className="button-primary">Add Task</button>
+
+        <button onClick={addTask} className="button-primary">
+          Add Task
+        </button>
       </div>
 
-      {/* ───── tabs ───── */}
+      {/* tabs */}
       <div className="tab-buttons-container">
         <button
-          onClick={() => setShowCompleted(false)}
           className={`tab-button ${!showCompleted ? "active" : "inactive"}`}
+          onClick={() => setShowCompleted(false)}
         >
           Current
         </button>
         <button
-          onClick={() => setShowCompleted(true)}
           className={`tab-button ${showCompleted ? "active" : "inactive"}`}
+          onClick={() => setShowCompleted(true)}
         >
           Complete
         </button>
       </div>
 
-      <h3>{showCompleted ? "Completed Tasks" : "Current Tasks"}</h3>
-
-      {/* ───── select‑all / sync / calendar connect ───── */}
-      <div
-        style={{
-          marginBottom: 12,
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          gap: 20,
-          fontWeight: 600,
-          color: "#00b5ad",
-        }}
-      >
-        {/* select all visible */}
-        <label style={{ fontSize: "0.9rem", cursor: "pointer" }}>
+      {/* sync bar */}
+      <div className="sync-bar">
+        <label className="sync-item">
           <input
             type="checkbox"
             checked={tasks
-              .filter(t => t.completed === showCompleted)
-              .every(t => selectedForSync[t.id])}
+              .filter((t) => t.completed === showCompleted)
+              .every((t) => selectedForSync[t.id])}
             onChange={() => {
-              const visible = tasks.filter(t => t.completed === showCompleted);
-              const allSel  = visible.every(t => selectedForSync[t.id]);
+              const visible = tasks.filter((t) => t.completed === showCompleted);
+              const allSel = visible.every((t) => selectedForSync[t.id]);
               const next = { ...selectedForSync };
-              visible.forEach(t => { next[t.id] = !allSel; });
+              visible.forEach((t) => {
+                next[t.id] = !allSel;
+              });
               setSelectedForSync(next);
             }}
           />{" "}
           Select All Visible
         </label>
-
-        {/* sync selected */}
         <span
+          className={`sync-item ${isSyncing ? "disabled" : "clickable"}`}
           onClick={isSyncing ? undefined : syncSelectedTasks}
-          style={{
-            cursor: isSyncing ? "default" : "pointer",
-            fontSize: "0.85rem",
-            textDecoration: "underline",
-            opacity: isSyncing ? 0.5 : 1,
-          }}
-          title="Sync selected tasks"
         >
           {isSyncing ? "Syncing…" : "Sync Selected"}
         </span>
-
-        {/* connect / disconnect calendar */}
         {!accessToken ? (
-          <button
-            onClick={loginWithGoogle}
-            className="button-secondary"
-            style={{ fontSize: "0.8rem" }}
-          >
-            Connect Google&nbsp;Calendar
+          <button className="button-secondary sync-item" onClick={loginWithGoogle}>
+            Connect Google Tasks
           </button>
         ) : (
           <span
+            className="sync-item clickable"
             onClick={disconnectGoogle}
-            style={{
-              fontSize: "0.8rem",
-              cursor: "pointer",
-              textDecoration: "underline",
-              userSelect: "none",
-              color: "#00b5ad",
-            }}
-            title="Click to disconnect Google Calendar"
           >
-            ✅ Calendar connected
+            ✅ Tasks connected
           </span>
         )}
       </div>
 
-      {/* ───── task list ───── */}
+      {/* task list */}
       {loading ? (
-        <p className="status-text">Loading tasks…</p>
+        <p className="status-text">Loading…</p>
       ) : tasks.length === 0 ? (
         <p className="status-text">No tasks yet</p>
       ) : (
         <ul className="task-list">
           {tasks
-            .filter(t => t.completed === showCompleted)
-            .map(task => {
+            .filter((t) => t.completed === showCompleted)
+            .map((task) => {
               const overdue = task.dueDate.toDate() < new Date() && !task.completed;
               return (
-                <li key={task.id} className={`task-item ${task.completed ? "completed" : ""}`}>
+                <li
+                  key={task.id}
+                  className={`task-item ${task.completed ? "completed" : ""}`}
+                >
                   <input
                     type="checkbox"
+                    style={{ marginRight: 8 }}
                     checked={!!selectedForSync[task.id]}
                     onChange={() => toggleSelectForSync(task.id)}
-                    title="Select for sync"
-                    style={{ marginRight: 8 }}
                   />
-
                   <div className="task-info">
                     <strong>{task.title}</strong>
                     <span className="task-metadata">
-                      {" "}– {task.category}
+                      {" "}
+                      – {task.category}
                       {task.className && ` (${task.className})`}
                       <span
                         className={`task-due-date ${overdue ? "overdue" : ""}`}
@@ -437,53 +403,60 @@ const endStr = new Date(
                       </span>
                     </span>
                   </div>
-
                   <div className="task-actions">
                     <button
                       onClick={() => toggleComplete(task.id, task.completed)}
-                      className="button-secondary"
-                    >
-                      {task.completed ? "Undo" : "Complete"}
+                      className="button-secondary task-action-button"
+                      >
+                      {task.completed ? "Undo" : "✅"}
                     </button>
                     <button
                       onClick={() => deleteTask(task.id)}
-                      className="button-danger"
+                      className="button-danger task-action-button"
                     >
-                      Delete
+                      ❌
                     </button>
                     <button
                       onClick={() => openDiaglog(task)}
-                      className="button-secondary more-button"
-                    >
-                      …
-                    </button>
-                  </div>
+                      className="button-secondary more-button task-action-button"
+                      >
+                        …
+                      </button>
+                    </div>
                 </li>
               );
             })}
         </ul>
       )}
 
-      {/* ───── popup dialog ───── */}
+      {/* dialog */}
       {dialogOpen && (
         <div className="task-dialog-overlay" onClick={closeDialog}>
-          <div className="task-dialog" onClick={e => e.stopPropagation()}>
+          <div className="task-dialog" onClick={(e) => e.stopPropagation()}>
             <h4>Edit details</h4>
 
+            {/* notes, link, due‑date */}
             <textarea
               className="dialog-field"
               rows="4"
               placeholder="Notes / description"
               value={notesDraft}
-              onChange={e => setNotesDraft(e.target.value)}
+              onChange={(e) => setNotesDraft(e.target.value)}
             />
-
             <input
               className="dialog-field"
               type="url"
               placeholder="Reference link (https://…)"
               value={linkDraft}
-              onChange={e => setLinkDraft(e.target.value)}
+              onChange={(e) => setLinkDraft(e.target.value)}
+            />
+
+            {/* ⭐ NEW due-date field */}
+            <input
+              className="dialog-field"
+              type="date"
+              value={dueDateDraft}
+              onChange={(e) => setDueDateDraft(e.target.value)}
             />
 
             {/* timer block */}
@@ -492,9 +465,7 @@ const endStr = new Date(
                 Current Time:&nbsp;{new Date(elapsedMs).toISOString().substr(11, 8)}
               </div>
               {activeTask?.timeSpent !== undefined && (
-                <div className="total-time">
-                  Total Time: {fmtHMS(activeTask.timeSpent || 0)}
-                </div>
+                <div className="total-time">Total Time: {fmtHMS(activeTask.timeSpent || 0)}</div>
               )}
               <button
                 type="button"
@@ -511,10 +482,10 @@ const endStr = new Date(
               <h5 style={{ marginBottom: 8 }}>Manual Time Entry</h5>
               <input
                 type="number"
-                placeholder="Mins"
                 className="dialog-field manual-time-input"
+                placeholder="Mins"
                 value={manualMinutes}
-                onChange={e => setManualMinutes(e.target.value)}
+                onChange={(e) => setManualMinutes(e.target.value)}
               />
               <div className="manual-buttons">
                 <button
@@ -524,7 +495,20 @@ const endStr = new Date(
                     const secs = Math.round(Number(manualMinutes) * 60);
                     const newTime = Math.max(0, (activeTask.timeSpent || 0) + secs);
                     await updateDoc(doc(db, "tasks", activeTask.id), { timeSpent: newTime });
-                    setActiveTask({ ...activeTask, timeSpent: newTime });
+                    // add manual_add log entry
+                    const logEntry = {
+                      timestamp: Timestamp.now(),
+                      action: "manual_add",
+                      duration: secs,
+                    };
+                    await updateDoc(doc(db, "tasks", activeTask.id), {
+                      timeLogs: [...(activeTask.timeLogs || []), logEntry],
+                    });
+                    setActiveTask({
+                      ...activeTask,
+                      timeSpent: newTime,
+                      timeLogs: [...(activeTask.timeLogs || []), logEntry],
+                    });
                     setManualMinutes("");
                   }}
                 >
@@ -536,7 +520,20 @@ const endStr = new Date(
                     if (!activeTask || isNaN(Number(manualMinutes))) return;
                     const secs = Math.max(0, Math.round(Number(manualMinutes) * 60));
                     await updateDoc(doc(db, "tasks", activeTask.id), { timeSpent: secs });
-                    setActiveTask({ ...activeTask, timeSpent: secs });
+                    // add manual_set log entry
+                    const logEntry = {
+                      timestamp: Timestamp.now(),
+                      action: "manual_set",
+                      duration: secs,
+                    };
+                    await updateDoc(doc(db, "tasks", activeTask.id), {
+                      timeLogs: [...(activeTask.timeLogs || []), logEntry],
+                    });
+                    setActiveTask({
+                      ...activeTask,
+                      timeSpent: secs,
+                      timeLogs: [...(activeTask.timeLogs || []), logEntry],
+                    });
                     setManualMinutes("");
                   }}
                 >
@@ -544,6 +541,14 @@ const endStr = new Date(
                 </button>
               </div>
             </div>
+
+            {/* Small, discrete time log button */}
+            <button
+              className="button-secondary time-log-button"
+              onClick={() => setShowTimeLogPopup(true)}
+            >
+              View Time Log
+            </button>
 
             <div className="dialog-actions">
               <button className="button-tertiary" onClick={closeDialog}>
@@ -553,6 +558,47 @@ const endStr = new Date(
                 Save
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Time Log Sub-popup */}
+      {showTimeLogPopup && (
+        <div
+          className="time-log-popup-overlay"
+          onClick={() => setShowTimeLogPopup(false)}
+        >
+          <div className="time-log-popup" onClick={(e) => e.stopPropagation()}>
+            <h4>Time Log</h4>
+            {!activeTask?.timeLogs || activeTask.timeLogs.length === 0 ? (
+              <p>No time log entries yet.</p>
+            ) : (
+              <ul className="time-log-list">
+                {[...activeTask.timeLogs]
+                  .sort((a, b) => b.timestamp.seconds - a.timestamp.seconds)
+                  .map((log, i) => (
+                    <li key={i}>
+                      <strong>
+                        {new Date(log.timestamp.seconds * 1000).toLocaleString()}:
+                      </strong>{" "}
+                      {log.action === "start" && "Timer started"}
+                      {log.action === "stop" &&
+                        `Timer stopped (+${fmtHMS(log.duration || 0)})`}
+                      {log.action === "manual_add" &&
+                        `Manual time added (+${fmtHMS(log.duration || 0)})`}
+                      {log.action === "manual_set" &&
+                        `Manual time set to ${fmtHMS(log.duration || 0)}`}
+                    </li>
+                  ))}
+              </ul>
+            )}
+
+            <button
+              onClick={() => setShowTimeLogPopup(false)}
+              className="button-primary time-log-close-btn"
+            >
+              Close
+            </button>
           </div>
         </div>
       )}
