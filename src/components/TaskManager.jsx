@@ -33,6 +33,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
   const [linkDraft, setLinkDraft] = useState("");
   const [dueDateDraft, setDueDateDraft] = useState("");
   const [manualMinutes, setManualMinutes] = useState("");
+  const [progressDraft, setProgressDraft] = useState(0);
 
   const [selectedForSync, setSelectedForSync] = useState({});
   const [accessToken, setAccessToken] = useState(null);
@@ -108,7 +109,8 @@ export default function TaskManager({ user, isImpersonating = false }) {
       notes: "",
       link: "",
       userId,
-      timeLogs: [], // initialize empty time log array
+      timeLogs: [],
+      progress: 0,
     });
     setTitle("");
     setDueDate("");
@@ -174,6 +176,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
     setActiveTask(task);
     setNotesDraft(task.notes || "");
     setLinkDraft(task.link || "");
+    setProgressDraft(task.progress ?? 0); //defaults progress to = 0 if undefined
 
     // pre‑fill due‑date ISO yyyy‑mm‑dd
     setDueDateDraft(task.dueDate.toDate().toISOString().split("T")[0]);
@@ -200,6 +203,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
       notes: notesDraft,
       link: linkDraft.trim(),
       dueDate: Timestamp.fromDate(localDate),
+      progress: progressDraft,
     });
     closeDialog();
   };
@@ -248,6 +252,17 @@ export default function TaskManager({ user, isImpersonating = false }) {
 
   /* ─────────────────────────────── helpers ──────────────────────────────── */
   const fmtHMS = (s) => new Date(s * 1000).toISOString().substr(11, 8);
+  const getEstimatedTimeRemaining = () => {
+    if (!activeTask || typeof activeTask.timeSpent !== "number") return "Unknown";
+    if (progressDraft <= 0 || progressDraft >= 100) return "Unknown";
+  
+    const estimatedTotal = activeTask.timeSpent / (progressDraft / 100);
+    const remaining = estimatedTotal - activeTask.timeSpent;
+  
+    if (isNaN(remaining) || remaining < 0) return "Unknown";
+  
+    return fmtHMS(Math.round(remaining));
+  }; 
 
   /* ─────────────────────────────── UI below ─────────────────────────────── */
   return (
@@ -458,6 +473,26 @@ export default function TaskManager({ user, isImpersonating = false }) {
               value={dueDateDraft}
               onChange={(e) => setDueDateDraft(e.target.value)}
             />
+
+            {/* progress slider */}
+            <div className="progress-slider-section">
+              <label htmlFor="progress-slider">
+                Progress: {progressDraft}%
+              </label>
+              <input
+                id="progress-slider"
+                type="range"
+                min="0"
+                max="100"
+                step="5"
+                value={progressDraft}
+                onChange={(e) => setProgressDraft(Number(e.target.value))}
+                className="progress-slider"
+              />
+            </div>
+            <div className="progress-estimate">
+              Est. Time Remaining: {getEstimatedTimeRemaining()}
+            </div>
 
             {/* timer block */}
             <div className="timer-section">

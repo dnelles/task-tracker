@@ -479,6 +479,31 @@ body {
   padding-left: 7px;
 }
 
+/* Progress slider */
+.progress-slider-section {
+  margin: 6px 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.progress-slider-section label {
+  font-weight: bold;
+  margin-bottom: 2px;
+}
+
+.progress-slider {
+  width: 100%;
+  margin-top: 4px;
+  accent-color: #4a90e2; /*customize slider thumb color */
+}
+
+.progress-estimate {
+  font-size: 0.85rem;
+  color: #555;
+  margin-top: 2px;
+  margin-bottom: 16px;
+}
+
 /* Authentication login/signup page */
 .auth-form {
   max-width: 320px;
