@@ -63,8 +63,8 @@ body {
 .input-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 0px;
+  gap: 8px;
+  margin-bottom: 2px;
   justify-content: center;
 }
 
@@ -74,7 +74,7 @@ body {
   background-color: #222222;
   border: 1.5px solid transparent;
   color: #e0e0e0;
-  padding: 10px 14px;
+  padding: 2px 14px;
   font-size: 1rem;
   border-radius: 8px;
   min-width: 140px;
@@ -109,14 +109,15 @@ body {
   background-color: #00b5ad;
   border: none;
   color: white;
-  padding: 12px 20px;
-  border-radius: 8px;
+  padding: 12px 24px;
+  border-radius: 6px;
   font-weight: 600;
   cursor: pointer;
-  min-width: 120px;
+  margin-top: 0px;
+  font-size: 1.1rem;
   transition: background-color 0.2s ease;
-}
-
+  }
+  
 .button-primary:hover {
   background-color: #009688;
 }
@@ -124,19 +125,19 @@ body {
 .task-list {
   list-style: none;
   padding: 0;
-  margin: 0;
+  margin: -24px;
 }
 
 .task-item {
   background: #2a2a2a;
   border-radius: 8px;
-  padding: 4px 12px 4px 8px;
-  margin-bottom: 8px; /* ↓ smaller spacing between tasks */
+  padding: 8px 12px 8px 8px;
+  margin-bottom: 8px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   transition: background-color 0.2s ease;
-  font-size: 0.95rem; /* ↓ slightly smaller font */
+  font-size: 0.95rem;
 }
 
 .task-item:hover {
@@ -234,11 +235,11 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 24px; /* space between heading and inputs */
+  gap: 32px; /* space between heading and inputs */
 }
 
 .main-heading {
-  margin: 0 0 24px;
+  margin: 0 0 8px;
   font-size: 2.8rem; /* Adjust as needed */
   font-weight: 700;
   text-align: center;
@@ -277,6 +278,7 @@ body {
 .sync-item.clickable {
   cursor: pointer;
   text-decoration: underline;
+  transform: translateY(-3px);
 }
 
 .sync-item.disabled {
@@ -289,6 +291,7 @@ body {
   padding: 5px 10px;
   border-radius: 4px;
   cursor: pointer;
+  margin-top: -4px;
   margin-right: 10px;
 }
 
@@ -353,17 +356,38 @@ body {
 }
 
 .button-tertiary {
-  border: 1.5px solid #777;
   background: transparent;
+  border: 1.5px solid #777;
   color: #aaa;
-  padding: 8px 16px;
+  padding: 8px 12px;
   border-radius: 6px;
+  font-weight: 600;
   cursor: pointer;
+  margin-top: 20px;
+  font-size: 1.1rem;
+  transition: background-color 0.2s ease;
 }
 
 .button-tertiary:hover {
   background: #555;
   color: #eee;
+}
+
+.button-task-save {
+  background-color: #00b5ad;
+  border: none;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 20px;
+  font-size: 1.1rem;
+  transition: background-color 0.2s ease;
+}
+
+.button-task-save:hover {
+  background-color: #009688;
 }
 
 .more-button {

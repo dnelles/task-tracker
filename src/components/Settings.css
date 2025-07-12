@@ -1,0 +1,238 @@
+.settings-container {
+    max-width: 600px;
+    margin: 0.5rem auto;
+    padding: 1.5rem;
+    background-color: #1e1e1e;
+    border-radius: 10px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+    color: #f1f1f1;
+    font-family: 'Inter', 'Segoe UI', 'Roboto', sans-serif;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+.settings-container h2 {
+    margin-bottom: 1rem;
+    font-weight: 700;
+    font-size: 2rem;
+    text-align: center;
+    color: #f1f1f1;
+  }
+  
+  label {
+    font-weight: 600;
+    color: #bbbbbb;
+    margin-bottom: 6px;
+  }
+  
+.settings-input,
+.settings-select {
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 1.5px solid transparent;
+    background-color: #222222;
+    color: #e0e0e0;
+    font-size: 1rem;
+    transition: border-color 0.2s ease;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  
+.settings-input::placeholder {
+    color: #777777;
+  }
+  
+.settings-input:focus,
+.settings-select:focus {
+    outline: none;
+    border-color: #00b5ad;
+  }
+  
+  /* Add small outline border to class inputs in popup */
+.outlined-input {
+    border: 1.5px solid #00b5ad;
+  }
+  
+  /* Save button */
+.settings-save-button {
+    margin-top: 20px;
+    padding: 12px 0;
+    border: none;
+    border-radius: 8px;
+    background-color: #00b5ad;
+    color: white;
+    font-weight: 600;
+    font-size: 1.1rem;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+  }
+  
+.settings-save-button:hover {
+    background-color: #009688;
+  }
+  
+  /* Popup overlay & container */
+.time-log-popup-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.85);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1001;
+  }
+  
+.time-log-popup {
+    background: #222;
+    color: #eee;
+    border-radius: 8px;
+    padding: 20px;
+    width: 90%;
+    max-width: 400px;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.9);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  }
+  
+.time-log-popup h4 {
+    margin-top: 0;
+    margin-bottom: 4px;
+    color: #00b5ad;
+  }
+  
+  /* Class input row */
+.class-input-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    align-items: center;
+  }
+  
+  /* Input inside the class row */
+.class-input-field {
+    flex-grow: 1;
+  }
+  
+  /* Remove button next to each input */
+.class-remove-button {
+    min-width: 36px;
+    padding: 4px 6px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 1.2rem;
+    line-height: 1;
+    background-color: #c94f4f;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    transition: background-color 0.2s ease;
+  }
+  
+.class-remove-button:hover {
+    background-color: #a53c3c;
+  }
+  
+  /* Add Class button */
+.add-class-button {
+    margin-bottom: 16px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 1rem;
+    background-color: #00796b;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    transition: background-color 0.2s ease;
+  }
+  
+.add-class-button:hover {
+    background-color: #004d40;
+  }
+  
+  /* Buttons row at bottom of popup */
+.popup-buttons-row {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+  }
+  
+/* Base styles for both buttons */
+.popup-button-equal {
+    min-width: 100px;
+    padding: 8px 0;
+    font-size: 1rem;
+    border-radius: 8px;
+    box-sizing: border-box;
+    vertical-align: middle;
+    display: inline-flex;             /* Use flexbox */
+    justify-content: center;          /* center horizontally */
+    align-items: center;              /* center vertically */
+  }
+  
+  /* Hover states */
+.button-tertiary:hover {
+    background: #555;
+    color: #eee;
+  }
+
+  /* Save button */
+.settings-save-button {
+    background-color: #00b5ad;
+    border: none;
+    color: white;
+    padding: 8px 0;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 20px;
+    font-size: 1.1rem;
+    transition: background-color 0.2s ease;
+  }
+  
+.settings-save-button:hover {
+    background-color: #009688;
+  }
+
+.edit-classes-button {
+    background-color: transparent;
+    border: 1.5px solid #00b5ad;
+    color: #00b5ad;
+    max-width: 150px;
+    align-self: center;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.85rem;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.edit-classes-button:hover {
+    background-color: #00b5ad;
+    color: #121212;
+}
+
+/* Cancel button */
+.settings-cancel-button {
+    background: transparent;
+    border: 1.5px solid #777;
+    color: #aaa;
+    padding: 8px 0;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 20px;
+    font-size: 1.1rem;
+    transition: background-color 0.2s ease;
+  }
+  
+.settings-cancel-button:hover {
+    background-color: #555;
+    color: #eee
+  }

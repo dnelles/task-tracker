@@ -1,13 +1,19 @@
 .stats-container {
-    max-width: 600px;
-    margin: 2rem auto;
+    max-width: 800px;
+    margin: .5rem auto;
     padding: 1.5rem;
     background-color: #1e1e1e;
     border-radius: 10px;
     box-shadow: 0 0 10px rgba(0,0,0,0.3);
     color: #f1f1f1;
   }
-  
+  .stats-container h2 {
+    margin-bottom: 1rem;
+    font-weight: 700;
+    font-size: 2.0rem;
+    text-align: center;
+    color: #f1f1f1;
+  }
   .stats-list {
     list-style-type: none;
     padding-left: 0;

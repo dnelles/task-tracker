@@ -4,7 +4,8 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
-  doc,
+  doc as firestoreDoc,
+  getDoc,
   Timestamp,
   onSnapshot,
   query,
@@ -23,6 +24,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
   const [category, setCategory] = useState("School");
   const [dueDate, setDueDate] = useState("");
   const [className, setClassName] = useState("");
+  const [userClasses, setUserClasses] = useState([]);
 
   const [loading, setLoading] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
@@ -37,6 +39,8 @@ export default function TaskManager({ user, isImpersonating = false }) {
 
   const [selectedForSync, setSelectedForSync] = useState({});
   const [accessToken, setAccessToken] = useState(null);
+  const [isLoadingUser, setIsLoadingUser] = useState(true);
+  const [firstName, setFirstName] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
 
   /* stopwatch */
@@ -47,12 +51,32 @@ export default function TaskManager({ user, isImpersonating = false }) {
   /* Time Log popup */
   const [showTimeLogPopup, setShowTimeLogPopup] = useState(false);
 
-  /* ─────────────────────────────── load saved Tasks token ──────────────────── */
+  /* ─────────────────────────────── Fetch user information ──────────────────── */
   const userId = user.uid;
   useEffect(() => {
-    const tok = localStorage.getItem(`google_access_token_${userId}`);
-    setAccessToken(tok || null);
+    const fetchUserSettings = async () => {
+      try {
+        const docRef = firestoreDoc(db, "users", userId);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.defaultCategory) {
+            setCategory(data.defaultCategory);
+          }
+          if (data.firstName) {
+            setFirstName(data.firstName);
+          }
+          if (Array.isArray(data.classes)) {
+            setUserClasses(data.classes);
+          }
+        }
+      } finally {
+        setIsLoadingUser(false);
+      }
+    };
+    fetchUserSettings();
   }, [userId]);
+  
 
   /* ─────────────────────────────── Firestore listener ──────────────────────── */
   useEffect(() => {
@@ -119,9 +143,9 @@ export default function TaskManager({ user, isImpersonating = false }) {
   };
 
   const toggleComplete = (id, cur) =>
-    updateDoc(doc(db, "tasks", id), { completed: !cur });
+    updateDoc(firestoreDoc(db, "tasks", id), { completed: !cur });
 
-  const deleteTask = (id) => deleteDoc(doc(db, "tasks", id));
+  const deleteTask = (id) => deleteDoc(firestoreDoc(db, "tasks", id));
 
   /* stopwatch handlers */
   const startTimer = async () => {
@@ -136,7 +160,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
         timestamp: Timestamp.now(),
         action: "start",
       };
-      await updateDoc(doc(db, "tasks", activeTask.id), {
+      await updateDoc(firestoreDoc(db, "tasks", activeTask.id), {
         timeLogs: [...(activeTask.timeLogs || []), logEntry],
       });
       setActiveTask((p) =>
@@ -148,7 +172,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
     if (!timerRunning || !activeTask) return;
     const secs = Math.round((Date.now() - timerStart) / 1000);
     setTimerRunning(false);
-    await updateDoc(doc(db, "tasks", activeTask.id), {
+    await updateDoc(firestoreDoc(db, "tasks", activeTask.id), {
       timeSpent: increment(secs),
     });
     // Add time log entry for stop
@@ -157,7 +181,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
       action: "stop",
       duration: secs,
     };
-    await updateDoc(doc(db, "tasks", activeTask.id), {
+    await updateDoc(firestoreDoc(db, "tasks", activeTask.id), {
       timeLogs: [...(activeTask.timeLogs || []), logEntry],
     });
     setActiveTask((p) =>
@@ -199,7 +223,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
     const [y, m, d] = dueDateDraft.split("-").map(Number);
     const localDate = new Date(y, m - 1, d);
 
-    await updateDoc(doc(db, "tasks", activeTask.id), {
+    await updateDoc(firestoreDoc(db, "tasks", activeTask.id), {
       notes: notesDraft,
       link: linkDraft.trim(),
       dueDate: Timestamp.fromDate(localDate),
@@ -283,7 +307,9 @@ export default function TaskManager({ user, isImpersonating = false }) {
           ⚠️ You are impersonating: {user.email || user.uid}
         </div>
       )}
-      <h2 className="main-heading">Task Wizard</h2>
+      <h2 className="main-heading">
+        {isLoadingUser ? null : firstName ? `Hi there ${firstName}`:"Task Wizard"}  
+      </h2>
 
       {/* ── input row ───────────────── */}
       <div className="input-row">
@@ -305,15 +331,19 @@ export default function TaskManager({ user, isImpersonating = false }) {
         </select>
 
         {category === "School" && (
-          <input
-            type="text"
-            className="input-text input-class"
-            placeholder="Class"
+          <select
             value={className}
             onChange={(e) => setClassName(e.target.value)}
-          />
+            className="input-select input-class"
+          >
+            <option value="">Select Class</option>
+            {userClasses.map((cls, idx) => (
+              <option key={idx} value={cls}>
+                {cls}
+              </option>
+            ))}
+          </select>
         )}
-
         <input
           type="date"
           className="input-date"
@@ -381,7 +411,6 @@ export default function TaskManager({ user, isImpersonating = false }) {
           </span>
         )}
       </div>
-
       {/* task list */}
       {loading ? (
         <p className="status-text">Loading…</p>
@@ -529,14 +558,14 @@ export default function TaskManager({ user, isImpersonating = false }) {
                     if (!activeTask || isNaN(Number(manualMinutes))) return;
                     const secs = Math.round(Number(manualMinutes) * 60);
                     const newTime = Math.max(0, (activeTask.timeSpent || 0) + secs);
-                    await updateDoc(doc(db, "tasks", activeTask.id), { timeSpent: newTime });
+                    await updateDoc(firestoreDoc(db, "tasks", activeTask.id), { timeSpent: newTime });
                     // add manual_add log entry
                     const logEntry = {
                       timestamp: Timestamp.now(),
                       action: "manual_add",
                       duration: secs,
                     };
-                    await updateDoc(doc(db, "tasks", activeTask.id), {
+                    await updateDoc(firestoreDoc(db, "tasks", activeTask.id), {
                       timeLogs: [...(activeTask.timeLogs || []), logEntry],
                     });
                     setActiveTask({
@@ -554,14 +583,14 @@ export default function TaskManager({ user, isImpersonating = false }) {
                   onClick={async () => {
                     if (!activeTask || isNaN(Number(manualMinutes))) return;
                     const secs = Math.max(0, Math.round(Number(manualMinutes) * 60));
-                    await updateDoc(doc(db, "tasks", activeTask.id), { timeSpent: secs });
+                    await updateDoc(firestoreDoc(db, "tasks", activeTask.id), { timeSpent: secs });
                     // add manual_set log entry
                     const logEntry = {
                       timestamp: Timestamp.now(),
                       action: "manual_set",
                       duration: secs,
                     };
-                    await updateDoc(doc(db, "tasks", activeTask.id), {
+                    await updateDoc(firestoreDoc(db, "tasks", activeTask.id), {
                       timeLogs: [...(activeTask.timeLogs || []), logEntry],
                     });
                     setActiveTask({
@@ -589,7 +618,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
               <button className="button-tertiary" onClick={closeDialog}>
                 Cancel
               </button>
-              <button className="button-primary" onClick={saveDialog}>
+              <button className="button-task-save" onClick={saveDialog}>
                 Save
               </button>
             </div>
