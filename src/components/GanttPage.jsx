@@ -40,11 +40,11 @@ export default function GanttPage({ user }) {
             dueDate: end,
             progress: data.progress ?? 0,
             notes: data.notes || "",
-            timeTracked: data.timeTracked || 0,
+            timeTracked: data.timeSpent || 0,
             completed: data.completed || false
           };
         })
-        .filter((task) => !task.completed); // Exclude completed tasks
+        .filter((task) => !task.completed);
 
       setTasks(fetchedTasks);
     });
@@ -88,6 +88,13 @@ export default function GanttPage({ user }) {
     if (progress >= 60) return "#0984e3";
     if (progress >= 30) return "#fdcb6e";
     return "#d63031";
+  };
+
+  const formatTime = (seconds) => {
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   const getMonthGroups = () => {
@@ -135,7 +142,7 @@ export default function GanttPage({ user }) {
           <tbody>
             {Object.entries(groupedTasks).map(([className, assignments]) => (
               <React.Fragment key={className}>
-                <tr><td colSpan={weeks.length + 1} style={{ backgroundColor: "#222", color: "#00b5ad", fontWeight: "bold", padding: "6px 8px", fontSize: "1rem", borderTop: "2px solid #555" }}>{className}</td></tr>
+                <tr><td colSpan={weeks.length + 1} style={{ backgroundColor: "#222", color: "#00b5ad", fontWeight: "bold", padding: "6px 8px", fontSize: "1rem", borderTop: "2px solid #555", alignItems: "left" }}>{className}</td></tr>
                 {assignments.map((task) => {
                   const { leftPx, widthPx } = getBarPosition(task);
                   return (
@@ -191,7 +198,7 @@ export default function GanttPage({ user }) {
                                   <div><strong>{task.title}</strong></div>
                                   <div>Due: {format(task.dueDate, "MMM d, yyyy")}</div>
                                   {task.notes && <div>Notes: {task.notes}</div>}
-                                  <div>Tracked: {task.timeTracked} min</div>
+                                  <div>Tracked: {formatTime(task.timeTracked)}</div>
                                 </div>
                               )}
                             </div>
