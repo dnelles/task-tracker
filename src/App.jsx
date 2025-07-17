@@ -5,6 +5,7 @@ import { auth } from "./firebase";
 
 import TaskManager from "./components/TaskManager";
 import StatsPage   from "./components/StatsPage";
+import GanttPage from "./components/GanttPage";
 import SettingsPage from "./components/Settings";
 import AdminPage   from "./components/Admin";
 import AuthForm    from "./components/AuthForm";
@@ -47,6 +48,7 @@ export default function App() {
       <nav className="nav-bar">
         <Link to="/"      className="nav-link">Tasks</Link>
         <Link to="/stats" className="nav-link">Stats</Link>
+        <Link to="/gantt" className="nav-link">Gantt</Link>
         <Link to="/settings" className="nav-link">Settings</Link>
 
         {ADMIN_USER_IDS.includes(authUser.uid) && (
@@ -83,15 +85,22 @@ export default function App() {
           }
         />
         <Route
-        path="/settings"
-        element={
-          <SettingsPage
-            user={effectiveUser}
-            isImpersonating={!!impersonatedUser}
-          />
-        }
-      />
-
+          path="/gantt"
+          element={
+            <GanttPage
+              user={effectiveUser}
+            />
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <SettingsPage
+              user={effectiveUser}
+              isImpersonating={!!impersonatedUser}
+            />
+          }
+        />
         <Route
           path="/admin"
           element={

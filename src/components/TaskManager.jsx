@@ -7,6 +7,7 @@ import {
   doc as firestoreDoc,
   getDoc,
   Timestamp,
+  serverTimestamp,
   onSnapshot,
   query,
   orderBy,
@@ -118,7 +119,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
     localStorage.removeItem(`google_access_token_${userId}`);
   };
 
-  /* ─────────────────────────────── task CRUD helpers ──────────────────────── */
+  /* ─────────────────────────────── Task CRUD Helpers ──────────────────────── */
   const addTask = async () => {
     if (!title || !dueDate) return alert("Title and due date are required");
     const [y, m, d] = dueDate.split("-").map(Number);
@@ -127,6 +128,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
       title,
       category,
       dueDate: Timestamp.fromDate(localDate),
+      startDate: serverTimestamp(), //Set current date/time as startdate
       completed: false,
       timeSpent: 0,
       className: category === "School" ? className : "",

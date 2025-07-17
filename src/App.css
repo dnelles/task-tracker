@@ -681,3 +681,10 @@ body {
 .icon-button.danger:hover {
   background-color: rgba(220, 53, 69, 0.15);
 }
+
+
+/* Gantt Chart Tooltips */
+.tooltip-container:hover .tooltip {
+  opacity: 1;
+  pointer-events: auto;
+}
