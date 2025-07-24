@@ -144,8 +144,18 @@ export default function TaskManager({ user, isImpersonating = false }) {
     setClassName("");
   };
 
-  const toggleComplete = (id, cur) =>
-    updateDoc(firestoreDoc(db, "tasks", id), { completed: !cur });
+  const toggleComplete = async (id, cur) => {
+    const updates = { completed: !cur };
+  
+    // If marking as complete, add completedAt timestamp
+    if (!cur) {
+      updates.completedAt = serverTimestamp();
+    } else {
+      updates.completedAt = null; // Clear it if undoing
+    }
+  
+    await updateDoc(firestoreDoc(db, "tasks", id), updates);
+  };  
 
   const deleteTask = (id) => deleteDoc(firestoreDoc(db, "tasks", id));
 
