@@ -362,7 +362,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
         </div>
       )}
       <h2 className="main-heading">
-        {isLoadingUser ? null : firstName ? `Hi there ${firstName}` : "Task Wizard"}
+        {isLoadingUser ? null : firstName ? `Hi there, ${firstName}` : "Task Wizard"}
       </h2>
 
       {/* ── input row ───────────────── */}
