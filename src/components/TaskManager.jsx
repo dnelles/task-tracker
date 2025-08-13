@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   collection,
   addDoc,
@@ -14,11 +14,11 @@ import {
   increment,
   where,
 } from "firebase/firestore";
-import { useGoogleLogin } from "@react-oauth/google";
-import { db } from "../firebase";
+import { db, auth } from "../firebase";
 
 export default function TaskManager({ user, isImpersonating = false }) {
   if (!user) return null; // ── guard for unauthenticated render
+
   /* ─────────────────────────────────── state ────────────────────────────────── */
   const [tasks, setTasks] = useState([]);
   const [title, setTitle] = useState("");
@@ -39,10 +39,12 @@ export default function TaskManager({ user, isImpersonating = false }) {
   const [progressDraft, setProgressDraft] = useState(0);
 
   const [selectedForSync, setSelectedForSync] = useState({});
-  const [accessToken, setAccessToken] = useState(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [firstName, setFirstName] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
+
+  // NEW: persistent Google Tasks connection status
+  const [googleConnected, setGoogleConnected] = useState(false);
 
   /* stopwatch */
   const [timerRunning, setTimerRunning] = useState(false);
@@ -51,6 +53,20 @@ export default function TaskManager({ user, isImpersonating = false }) {
 
   /* Time Log popup */
   const [showTimeLogPopup, setShowTimeLogPopup] = useState(false);
+
+  /* Toast popup */
+  const [toast, setToast] = useState(null); // { message, type: 'success'|'error'|'info' }
+  const toastTimerRef = useRef(null);
+  const showToast = (message, type = "success", duration = 3000) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToast({ message, type });
+    toastTimerRef.current = setTimeout(() => setToast(null), duration);
+  };
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
+  }, []);
 
   /* ─────────────────────────────── Fetch user information ──────────────────── */
   const userId = user.uid;
@@ -77,7 +93,6 @@ export default function TaskManager({ user, isImpersonating = false }) {
     };
     fetchUserSettings();
   }, [userId]);
-  
 
   /* ─────────────────────────────── Firestore listener ──────────────────────── */
   useEffect(() => {
@@ -104,19 +119,54 @@ export default function TaskManager({ user, isImpersonating = false }) {
     return () => clearInterval(id);
   }, [timerRunning, timerStart]);
 
-  /* ─────────────────────────────── Google Tasks OAuth ─────────────────────── */
-  const loginWithGoogle = useGoogleLogin({
-    scope: "https://www.googleapis.com/auth/tasks",
-    onSuccess: ({ access_token }) => {
-      setAccessToken(access_token);
-      localStorage.setItem(`google_access_token_${userId}`, access_token);
-    },
-    onError: () => alert("Google Tasks connection failed"),
-  });
+  /* ─────────────────────────── Google Tasks (persistent) ───────────────────── */
 
-  const disconnectGoogle = () => {
-    setAccessToken(null);
-    localStorage.removeItem(`google_access_token_${userId}`);
+  // Helper to call your Vercel APIs with the current Firebase ID token
+  async function authedFetch(path, options = {}) {
+    const idToken = await auth.currentUser.getIdToken();
+    return fetch(path, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+        ...(options.headers || {}),
+      },
+    });
+  }
+
+  // Check whether this user has already connected Google Tasks (refresh token saved server-side)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        if (!userId) return;
+        const res = await authedFetch("/api/google/status");
+        if (!res.ok) throw new Error();
+        const { connected } = await res.json();
+        if (!cancelled) setGoogleConnected(!!connected);
+      } catch {
+        if (!cancelled) setGoogleConnected(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  // Starts OAuth flow via server (redirect)
+  const connectGoogleTasks = () => {
+    window.location.href = `/api/google/start?uid=${userId}`;
+  };
+
+  // Disconnects across devices (revokes + deletes refresh token server-side)
+  const disconnectGoogle = async () => {
+    try {
+      await authedFetch("/api/google/revoke", { method: "POST" });
+    } catch {
+      // ignore
+    } finally {
+      setGoogleConnected(false);
+      showToast("Disconnected Google Tasks", "info");
+    }
   };
 
   /* ─────────────────────────────── Task CRUD Helpers ──────────────────────── */
@@ -146,16 +196,13 @@ export default function TaskManager({ user, isImpersonating = false }) {
 
   const toggleComplete = async (id, cur) => {
     const updates = { completed: !cur };
-  
-    // If marking as complete, add completedAt timestamp
     if (!cur) {
       updates.completedAt = serverTimestamp();
     } else {
-      updates.completedAt = null; // Clear it if undoing
+      updates.completedAt = null;
     }
-  
     await updateDoc(firestoreDoc(db, "tasks", id), updates);
-  };  
+  };
 
   const deleteTask = (id) => deleteDoc(firestoreDoc(db, "tasks", id));
 
@@ -166,12 +213,8 @@ export default function TaskManager({ user, isImpersonating = false }) {
     setElapsedMs(0);
     setTimerRunning(true);
 
-    // Add time log entry for start
     if (activeTask) {
-      const logEntry = {
-        timestamp: Timestamp.now(),
-        action: "start",
-      };
+      const logEntry = { timestamp: Timestamp.now(), action: "start" };
       await updateDoc(firestoreDoc(db, "tasks", activeTask.id), {
         timeLogs: [...(activeTask.timeLogs || []), logEntry],
       });
@@ -180,6 +223,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
       );
     }
   };
+
   const stopTimer = async () => {
     if (!timerRunning || !activeTask) return;
     const secs = Math.round((Date.now() - timerStart) / 1000);
@@ -187,12 +231,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
     await updateDoc(firestoreDoc(db, "tasks", activeTask.id), {
       timeSpent: increment(secs),
     });
-    // Add time log entry for stop
-    const logEntry = {
-      timestamp: Timestamp.now(),
-      action: "stop",
-      duration: secs,
-    };
+    const logEntry = { timestamp: Timestamp.now(), action: "stop", duration: secs };
     await updateDoc(firestoreDoc(db, "tasks", activeTask.id), {
       timeLogs: [...(activeTask.timeLogs || []), logEntry],
     });
@@ -212,16 +251,14 @@ export default function TaskManager({ user, isImpersonating = false }) {
     setActiveTask(task);
     setNotesDraft(task.notes || "");
     setLinkDraft(task.link || "");
-    setProgressDraft(task.progress ?? 0); //defaults progress to = 0 if undefined
-
-    // pre‑fill due‑date ISO yyyy‑mm‑dd
+    setProgressDraft(task.progress ?? 0);
     setDueDateDraft(task.dueDate.toDate().toISOString().split("T")[0]);
-
     setDialogOpen(true);
     setTimerRunning(false);
     setElapsedMs(0);
     setShowTimeLogPopup(false);
   };
+
   const closeDialog = () => {
     setDialogOpen(false);
     setTimerRunning(false);
@@ -230,11 +267,8 @@ export default function TaskManager({ user, isImpersonating = false }) {
 
   const saveDialog = async () => {
     if (!activeTask) return;
-
-    // convert local yyyy‑mm‑dd to Date (midnight local)
     const [y, m, d] = dueDateDraft.split("-").map(Number);
     const localDate = new Date(y, m - 1, d);
-
     await updateDoc(firestoreDoc(db, "tasks", activeTask.id), {
       notes: notesDraft,
       link: linkDraft.trim(),
@@ -250,11 +284,17 @@ export default function TaskManager({ user, isImpersonating = false }) {
 
   const syncSelectedTasks = async () => {
     const sel = tasks.filter((t) => selectedForSync[t.id]);
-    if (!accessToken) return alert("Connect Google Tasks first");
-    if (sel.length === 0) return alert("No tasks selected");
+    if (!googleConnected) return showToast("Connect Google Tasks first", "error");
+    if (sel.length === 0) return showToast("No tasks selected", "info");
 
     setIsSyncing(true);
     try {
+      // get a fresh access token from server (works across devices)
+      const tokRes = await authedFetch("/api/google/refresh", { method: "POST" });
+      if (!tokRes.ok) throw new Error(await tokRes.text());
+      const { access_token } = await tokRes.json();
+
+      let ok = 0, fail = 0;
       for (const t of sel) {
         const body = {
           title: `Due: ${t.title}`,
@@ -266,21 +306,25 @@ export default function TaskManager({ user, isImpersonating = false }) {
           {
             method: "POST",
             headers: {
-              Authorization: `Bearer ${accessToken}`,
+              Authorization: `Bearer ${access_token}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify(body),
           }
         );
-        const data = await res.json();
-        if (!res.ok) {
-          console.error("Sync error:", data);
-          alert(`Failed: ${t.title}\n${data.error?.message}`);
-        }
+        if (res.ok) ok++; else fail++;
+      }
+
+      if (fail === 0) {
+        showToast(`Tasks successfully synced (${ok})`, "success");
+      } else if (ok === 0) {
+        showToast("Task sync failed", "error");
+      } else {
+        showToast(`Partial sync: ${ok} succeeded, ${fail} failed`, "error");
       }
     } catch (err) {
       console.error(err);
-      alert("Sync failed (network or auth error).");
+      showToast("Task sync failed", "error");
     } finally {
       setIsSyncing(false);
     }
@@ -291,14 +335,12 @@ export default function TaskManager({ user, isImpersonating = false }) {
   const getEstimatedTimeRemaining = () => {
     if (!activeTask || typeof activeTask.timeSpent !== "number") return "Unknown";
     if (progressDraft <= 0 || progressDraft >= 100) return "Unknown";
-  
+
     const estimatedTotal = activeTask.timeSpent / (progressDraft / 100);
     const remaining = estimatedTotal - activeTask.timeSpent;
-  
     if (isNaN(remaining) || remaining < 0) return "Unknown";
-  
     return fmtHMS(Math.round(remaining));
-  }; 
+  };
 
   /* ─────────────────────────────── UI below ─────────────────────────────── */
   return (
@@ -320,7 +362,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
         </div>
       )}
       <h2 className="main-heading">
-        {isLoadingUser ? null : firstName ? `Hi there ${firstName}`:"Task Wizard"}  
+        {isLoadingUser ? null : firstName ? `Hi there ${firstName}` : "Task Wizard"}
       </h2>
 
       {/* ── input row ───────────────── */}
@@ -404,25 +446,25 @@ export default function TaskManager({ user, isImpersonating = false }) {
           />{" "}
           Select All Visible
         </label>
+
         <span
           className={`sync-item ${isSyncing ? "disabled" : "clickable"}`}
           onClick={isSyncing ? undefined : syncSelectedTasks}
         >
           {isSyncing ? "Syncing…" : "Sync Selected"}
         </span>
-        {!accessToken ? (
-          <button className="button-secondary sync-item" onClick={loginWithGoogle}>
+
+        {!googleConnected ? (
+          <button className="button-secondary sync-item" onClick={connectGoogleTasks}>
             Connect Google Tasks
           </button>
         ) : (
-          <span
-            className="sync-item clickable"
-            onClick={disconnectGoogle}
-          >
-            ✅ Tasks connected
+          <span className="sync-item clickable" onClick={disconnectGoogle}>
+            ✅ Google Tasks Connected
           </span>
         )}
       </div>
+
       {/* task list */}
       {loading ? (
         <p className="status-text">Loading…</p>
@@ -463,7 +505,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
                     <button
                       onClick={() => toggleComplete(task.id, task.completed)}
                       className="button-secondary task-action-button"
-                      >
+                    >
                       {task.completed ? "Undo" : "✅"}
                     </button>
                     <button
@@ -475,10 +517,10 @@ export default function TaskManager({ user, isImpersonating = false }) {
                     <button
                       onClick={() => openDiaglog(task)}
                       className="button-secondary more-button task-action-button"
-                      >
-                        …
-                      </button>
-                    </div>
+                    >
+                      …
+                    </button>
+                  </div>
                 </li>
               );
             })}
@@ -491,7 +533,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
           <div className="task-dialog" onClick={(e) => e.stopPropagation()}>
             <h4>Edit details</h4>
 
-            {/* notes, link, due‑date */}
+            {/* notes, link, due-date */}
             <textarea
               className="dialog-field"
               rows="4"
@@ -517,9 +559,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
 
             {/* progress slider */}
             <div className="progress-slider-section">
-              <label htmlFor="progress-slider">
-                Progress: {progressDraft}%
-              </label>
+              <label htmlFor="progress-slider">Progress: {progressDraft}%</label>
               <input
                 id="progress-slider"
                 type="range"
@@ -571,12 +611,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
                     const secs = Math.round(Number(manualMinutes) * 60);
                     const newTime = Math.max(0, (activeTask.timeSpent || 0) + secs);
                     await updateDoc(firestoreDoc(db, "tasks", activeTask.id), { timeSpent: newTime });
-                    // add manual_add log entry
-                    const logEntry = {
-                      timestamp: Timestamp.now(),
-                      action: "manual_add",
-                      duration: secs,
-                    };
+                    const logEntry = { timestamp: Timestamp.now(), action: "manual_add", duration: secs };
                     await updateDoc(firestoreDoc(db, "tasks", activeTask.id), {
                       timeLogs: [...(activeTask.timeLogs || []), logEntry],
                     });
@@ -596,12 +631,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
                     if (!activeTask || isNaN(Number(manualMinutes))) return;
                     const secs = Math.max(0, Math.round(Number(manualMinutes) * 60));
                     await updateDoc(firestoreDoc(db, "tasks", activeTask.id), { timeSpent: secs });
-                    // add manual_set log entry
-                    const logEntry = {
-                      timestamp: Timestamp.now(),
-                      action: "manual_set",
-                      duration: secs,
-                    };
+                    const logEntry = { timestamp: Timestamp.now(), action: "manual_set", duration: secs };
                     await updateDoc(firestoreDoc(db, "tasks", activeTask.id), {
                       timeLogs: [...(activeTask.timeLogs || []), logEntry],
                     });
@@ -640,10 +670,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
 
       {/* Time Log Sub-popup */}
       {showTimeLogPopup && (
-        <div
-          className="time-log-popup-overlay"
-          onClick={() => setShowTimeLogPopup(false)}
-        >
+        <div className="time-log-popup-overlay" onClick={() => setShowTimeLogPopup(false)}>
           <div className="time-log-popup" onClick={(e) => e.stopPropagation()}>
             <h4>Time Log</h4>
             {!activeTask?.timeLogs || activeTask.timeLogs.length === 0 ? (
@@ -658,24 +685,54 @@ export default function TaskManager({ user, isImpersonating = false }) {
                         {new Date(log.timestamp.seconds * 1000).toLocaleString()}:
                       </strong>{" "}
                       {log.action === "start" && "Timer started"}
-                      {log.action === "stop" &&
-                        `Timer stopped (+${fmtHMS(log.duration || 0)})`}
-                      {log.action === "manual_add" &&
-                        `Manual time added (+${fmtHMS(log.duration || 0)})`}
-                      {log.action === "manual_set" &&
-                        `Manual time set to ${fmtHMS(log.duration || 0)}`}
+                      {log.action === "stop" && `Timer stopped (+${fmtHMS(log.duration || 0)})`}
+                      {log.action === "manual_add" && `Manual time added (+${fmtHMS(log.duration || 0)})`}
+                      {log.action === "manual_set" && `Manual time set to ${fmtHMS(log.duration || 0)}`}
                     </li>
                   ))}
               </ul>
             )}
-
-            <button
-              onClick={() => setShowTimeLogPopup(false)}
-              className="button-primary time-log-close-btn"
-            >
+            <button onClick={() => setShowTimeLogPopup(false)} className="button-primary time-log-close-btn">
               Close
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Toast (click to dismiss) */}
+      {toast && (
+        <div
+          role="status"
+          onClick={() => setToast(null)}
+          title="Click to dismiss"
+          style={{
+            position: "fixed",
+            right: 24,
+            bottom: 24,
+            background:
+              toast.type === "success"
+                ? "#16a34a"
+                : toast.type === "error"
+                ? "#dc2626"
+                : "#2563eb",
+            color: "#fff",
+            padding: "12px 16px",
+            borderRadius: 10,
+            boxShadow: "0 10px 30px rgba(0,0,0,.25)",
+            zIndex: 1000,
+            fontWeight: 600,
+            cursor: "pointer",
+            animation: "toast-in .18s ease-out",
+          }}
+        >
+          {toast.message}
+          {/* quick inline keyframes */}
+          <style>{`
+            @keyframes toast-in {
+              from { opacity: 0; transform: translateY(6px); }
+              to { opacity: 1; transform: translateY(0); }
+            }
+          `}</style>
         </div>
       )}
     </div>
