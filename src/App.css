@@ -404,13 +404,6 @@ body {
   border-color: #007b7b;            /* darker teal border */
 }
 
-/* Admin Page */
-.admin-container {
-  width: 100%;
-  max-width: 900px;
-  margin: 0 auto;
-}
-
 .impersonation-notice {
   display: inline-flex;
   align-items: center;
@@ -688,3 +681,27 @@ body {
   opacity: 1;
   pointer-events: auto;
 }
+/* === Admin page: fix spacing + left alignment === */
+.admin-container h4 {
+  /* more room above lists under 'Current Tasks' / 'Completed Tasks' */
+  margin: 14px 0 8px 0;
+}
+
+/* === Admin page: force spacing + flush alignment (overrides global list rules) === */
+.admin-container .card .user-detail .admin-subheader {
+  margin: 14px 0 8px 0;               /* extra room above each list */
+}
+
+.admin-container .card .user-detail ul.task-list {
+  margin: 12px 0 0 0 !important;      /* space under the subheader */
+  padding-left: 0 !important;         /* flush with subheader text */
+}
+
+.admin-container .card .user-detail li.task-item {
+  padding-left: 0 !important;         /* remove left inset on items */
+}
+
+.admin-container .card .user-detail .status-text.admin-status {
+  margin-left: 0 !important;          /* 'None' aligns with subheader */
+}
+

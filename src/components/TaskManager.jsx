@@ -32,6 +32,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [activeTask, setActiveTask] = useState(null);
+  const [titleDraft, setTitleDraft] = useState("");
   const [notesDraft, setNotesDraft] = useState("");
   const [linkDraft, setLinkDraft] = useState("");
   const [dueDateDraft, setDueDateDraft] = useState("");
@@ -249,6 +250,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
   /* ───────────────────────── dialog helpers ──────────────────────────────── */
   const openDiaglog = (task) => {
     setActiveTask(task);
+    setTitleDraft(task.title || "");
     setNotesDraft(task.notes || "");
     setLinkDraft(task.link || "");
     setProgressDraft(task.progress ?? 0);
@@ -270,6 +272,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
     const [y, m, d] = dueDateDraft.split("-").map(Number);
     const localDate = new Date(y, m - 1, d);
     await updateDoc(firestoreDoc(db, "tasks", activeTask.id), {
+      title: titleDraft,
       notes: notesDraft,
       link: linkDraft.trim(),
       dueDate: Timestamp.fromDate(localDate),
@@ -533,7 +536,14 @@ export default function TaskManager({ user, isImpersonating = false }) {
           <div className="task-dialog" onClick={(e) => e.stopPropagation()}>
             <h4>Edit details</h4>
 
-            {/* notes, link, due-date */}
+            {/* title, notes, link, due-date */}
+            <input
+              type="text"
+              className="dialog-field"
+              placeholder="Task title"
+              value={titleDraft}
+              onChange={(e) => setTitleDraft(e.target.value)}
+            />
             <textarea
               className="dialog-field"
               rows="4"
