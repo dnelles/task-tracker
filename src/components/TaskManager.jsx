@@ -188,25 +188,33 @@ export default function TaskManager({ user, isImpersonating = false }) {
     if (!title || !dueDate) return alert("Title and due date are required");
     const [y, m, d] = dueDate.split("-").map(Number);
     const localDate = new Date(y, m - 1, d); // midnight local
-    await addDoc(collection(db, "tasks"), {
-      title,
-      category,
-      dueDate: Timestamp.fromDate(localDate),
-      startDate: serverTimestamp(), //Set current date/time as startdate
-      completed: false,
-      timeSpent: 0,
-      className: category === "School" ? className : "",
-      notes: "",
-      link: "",
-      userId,
-      timeLogs: [],
-      progress: 0,
-    });
-    await logActivity(`Added new task: "${title}"`);
-    setTitle("");
-    setDueDate("");
-    setCategory("School");
-    setClassName("");
+
+    showToast("Adding new task...", "info", 5000);
+    try {
+      await addDoc(collection(db, "tasks"), {
+        title,
+        category,
+        dueDate: Timestamp.fromDate(localDate),
+        startDate: serverTimestamp(), //Set current date/time as startdate
+        completed: false,
+        timeSpent: 0,
+        className: category === "School" ? className : "",
+        notes: "",
+        link: "",
+        userId,
+        timeLogs: [],
+        progress: 0,
+      });
+      await logActivity(`Added new task: "${title}"`);
+      showToast("Task added successfully!", "success");
+      setTitle("");
+      setDueDate("");
+      setCategory("School");
+      setClassName("");
+    } catch (error) {
+      showToast("Failed to add task.", "error");
+      console.error("Error adding task:", error);
+    }
   };
 
   const toggleComplete = async (id, cur) => {
@@ -216,20 +224,37 @@ export default function TaskManager({ user, isImpersonating = false }) {
     } else {
       updates.completedAt = null;
     }
-    const task = tasks.find(t => t.id === id);
-    await updateDoc(firestoreDoc(db, "tasks", id), updates);
-    if (task) {
-      await logActivity(`${!cur ? "Marked" : "Unmarked"} task as ${!cur ? "complete" : "incomplete"}: "${task.title}"`);
+    
+    showToast("Updating task status...", "info", 5000);
+    try {
+      const taskRef = firestoreDoc(db, "tasks", id);
+      const docSnap = await getDoc(taskRef);
+      if (docSnap.exists()) {
+        const taskTitle = docSnap.data().title;
+        await updateDoc(taskRef, updates);
+        await logActivity(`${!cur ? "Marked" : "Unmarked"} task as ${!cur ? "complete" : "incomplete"}: "${taskTitle}"`);
+        showToast("Task status updated!", "success");
+      }
+    } catch (error) {
+      showToast("Failed to update task status.", "error");
+      console.error("Error toggling task completion:", error);
     }
   };
 
   const deleteTask = async (id) => {
-    const taskRef = firestoreDoc(db, "tasks", id);
-    const docSnap = await getDoc(taskRef);
-    if (docSnap.exists()) {
-      const taskTitle = docSnap.data().title;
-      await deleteDoc(taskRef);
-      await logActivity(`Deleted task: "${taskTitle}"`);
+    showToast("Deleting task...", "info", 5000);
+    try {
+      const taskRef = firestoreDoc(db, "tasks", id);
+      const docSnap = await getDoc(taskRef);
+      if (docSnap.exists()) {
+        const taskTitle = docSnap.data().title;
+        await deleteDoc(taskRef);
+        await logActivity(`Deleted task: "${taskTitle}"`);
+        showToast("Task deleted successfully!", "success");
+      }
+    } catch (error) {
+      showToast("Failed to delete task.", "error");
+      console.error("Error deleting task:", error);
     }
   }
 
@@ -241,13 +266,17 @@ export default function TaskManager({ user, isImpersonating = false }) {
     setTimerRunning(true);
 
     if (activeTask) {
-      const logEntry = { timestamp: Timestamp.now(), action: "start" };
-      await updateDoc(firestoreDoc(db, "tasks", activeTask.id), {
-        timeLogs: [...(activeTask.timeLogs || []), logEntry],
-      });
-      setActiveTask((p) =>
-        p ? { ...p, timeLogs: [...(p.timeLogs || []), logEntry] } : p
-      );
+      try {
+        const logEntry = { timestamp: Timestamp.now(), action: "start" };
+        await updateDoc(firestoreDoc(db, "tasks", activeTask.id), {
+          timeLogs: [...(activeTask.timeLogs || []), logEntry],
+        });
+        setActiveTask((p) =>
+          p ? { ...p, timeLogs: [...(p.timeLogs || []), logEntry] } : p
+        );
+      } catch (error) {
+        console.error("Error starting timer:", error);
+      }
     }
   };
 
@@ -255,22 +284,27 @@ export default function TaskManager({ user, isImpersonating = false }) {
     if (!timerRunning || !activeTask) return;
     const secs = Math.round((Date.now() - timerStart) / 1000);
     setTimerRunning(false);
-    await updateDoc(firestoreDoc(db, "tasks", activeTask.id), {
-      timeSpent: increment(secs),
-    });
-    const logEntry = { timestamp: Timestamp.now(), action: "stop", duration: secs };
-    await updateDoc(firestoreDoc(db, "tasks", activeTask.id), {
-      timeLogs: [...(activeTask.timeLogs || []), logEntry],
-    });
-    setActiveTask((p) =>
-      p
-        ? {
-            ...p,
-            timeSpent: (p.timeSpent || 0) + secs,
-            timeLogs: [...(p.timeLogs || []), logEntry],
-          }
-        : p
-    );
+
+    try {
+      await updateDoc(firestoreDoc(db, "tasks", activeTask.id), {
+        timeSpent: increment(secs),
+      });
+      const logEntry = { timestamp: Timestamp.now(), action: "stop", duration: secs };
+      await updateDoc(firestoreDoc(db, "tasks", activeTask.id), {
+        timeLogs: [...(activeTask.timeLogs || []), logEntry],
+      });
+      setActiveTask((p) =>
+        p
+          ? {
+              ...p,
+              timeSpent: (p.timeSpent || 0) + secs,
+              timeLogs: [...(p.timeLogs || []), logEntry],
+            }
+          : p
+      );
+    } catch (error) {
+      console.error("Error stopping timer:", error);
+    }
   };
 
   /* ───────────────────────── dialog helpers ──────────────────────────────── */
@@ -299,28 +333,34 @@ export default function TaskManager({ user, isImpersonating = false }) {
     const oldDueDate = activeTask.dueDate.toDate().toISOString().split("T")[0];
     const oldProgress = activeTask.progress ?? 0;
 
-    const [y, m, d] = dueDateDraft.split("-").map(Number);
-    const localDate = new Date(y, m - 1, d);
-    await updateDoc(firestoreDoc(db, "tasks", activeTask.id), {
-      title: titleDraft,
-      notes: notesDraft,
-      link: linkDraft.trim(),
-      dueDate: Timestamp.fromDate(localDate),
-      progress: progressDraft,
-    });
-    
-    // Log changes
-    if (oldTitle !== titleDraft) {
-      await logActivity(`Renamed task from "${oldTitle}" to "${titleDraft}"`);
+    showToast("Saving changes...", "info", 5000);
+    try {
+      const [y, m, d] = dueDateDraft.split("-").map(Number);
+      const localDate = new Date(y, m - 1, d);
+      await updateDoc(firestoreDoc(db, "tasks", activeTask.id), {
+        title: titleDraft,
+        notes: notesDraft,
+        link: linkDraft.trim(),
+        dueDate: Timestamp.fromDate(localDate),
+        progress: progressDraft,
+      });
+      
+      // Log changes
+      if (oldTitle !== titleDraft) {
+        await logActivity(`Renamed task from "${oldTitle}" to "${titleDraft}"`);
+      }
+      if (oldDueDate !== dueDateDraft) {
+        await logActivity(`Updated due date for "${titleDraft}" from ${oldDueDate} to ${dueDateDraft}`);
+      }
+      if (oldProgress !== progressDraft) {
+        await logActivity(`Updated progress for "${titleDraft}" from ${oldProgress}% to ${progressDraft}%`);
+      }
+      showToast("Changes saved successfully!", "success");
+      closeDialog();
+    } catch (error) {
+      showToast("Failed to save changes.", "error");
+      console.error("Error saving task details:", error);
     }
-    if (oldDueDate !== dueDateDraft) {
-      await logActivity(`Updated due date for "${titleDraft}" from ${oldDueDate} to ${dueDateDraft}`);
-    }
-    if (oldProgress !== progressDraft) {
-      await logActivity(`Updated progress for "${titleDraft}" from ${oldProgress}% to ${progressDraft}%`);
-    }
-    
-    closeDialog();
   };
 
   /* ───────────────────────── Google Tasks sync selected ───────────────────── */
