@@ -1,0 +1,53 @@
+.activity-log-container {
+  max-width: 800px;
+  margin: 0.5rem auto;
+  padding: 1.5rem;
+  background-color: #1e1e1e;
+  border-radius: 10px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+  color: #f1f1f1;
+}
+
+.activity-log-container h2 {
+  margin-bottom: 1rem;
+  font-weight: 700;
+  font-size: 2rem;
+  text-align: center;
+  color: #f1f1f1;
+}
+
+.activity-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.activity-item {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  padding: 10px;
+  border-bottom: 1px solid #333;
+  gap: 16px; /* Added spacing between date and message */
+}
+
+.activity-item:last-child {
+  border-bottom: none;
+}
+
+.activity-date {
+  font-weight: 600;
+  min-width: 150px;
+  color: #bbb;
+}
+
+.activity-message {
+  flex-grow: 1;
+  color: #e0e0e0;
+}
+
+.status-text {
+  text-align: center;
+  font-style: italic;
+  color: #777;
+}

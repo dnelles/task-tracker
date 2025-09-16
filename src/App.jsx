@@ -10,6 +10,7 @@ import GanttPage     from "./components/GanttPage";
 import SettingsPage  from "./components/Settings";
 import AdminPage     from "./components/Admin";
 import AuthForm      from "./components/AuthForm";
+import ActivityLog   from "./components/ActivityLog";
 import "./App.css";
 
 const ADMIN_USER_IDS = [
@@ -62,6 +63,7 @@ export default function App() {
         <Link to="/stats"    className="nav-link">Stats</Link>
         <Link to="/gantt"    className="nav-link">Gantt</Link>
         <Link to="/settings" className="nav-link">Settings</Link>
+        <Link to="/activity" className="nav-link">Activity Log</Link>
 
         {(ADMIN_USER_IDS.includes(authUser?.uid) || userRole === "admin") && (
           <Link to="/admin" className="nav-link" style={{ color: "red" }}>
@@ -120,6 +122,12 @@ export default function App() {
                 impersonatedUid={impersonatedUser?.uid || null}
               />
             </RequireAdmin>
+          }
+        />
+        <Route
+          path="/activity"
+          element={
+            <ActivityLog user={effectiveUser} />
           }
         />
       </Routes>

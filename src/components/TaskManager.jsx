@@ -170,6 +170,19 @@ export default function TaskManager({ user, isImpersonating = false }) {
     }
   };
 
+  /* ─────────────────────────────── Activity Logging ──────────────────────── */
+  const logActivity = async (message) => {
+    try {
+      await addDoc(collection(db, "activityLog"), {
+        userId,
+        message,
+        timestamp: serverTimestamp(),
+      });
+    } catch (error) {
+      console.error("Error logging activity:", error);
+    }
+  };
+
   /* ─────────────────────────────── Task CRUD Helpers ──────────────────────── */
   const addTask = async () => {
     if (!title || !dueDate) return alert("Title and due date are required");
@@ -189,6 +202,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
       timeLogs: [],
       progress: 0,
     });
+    await logActivity(`Added new task: "${title}"`);
     setTitle("");
     setDueDate("");
     setCategory("School");
@@ -202,10 +216,22 @@ export default function TaskManager({ user, isImpersonating = false }) {
     } else {
       updates.completedAt = null;
     }
+    const task = tasks.find(t => t.id === id);
     await updateDoc(firestoreDoc(db, "tasks", id), updates);
+    if (task) {
+      await logActivity(`${!cur ? "Marked" : "Unmarked"} task as ${!cur ? "complete" : "incomplete"}: "${task.title}"`);
+    }
   };
 
-  const deleteTask = (id) => deleteDoc(firestoreDoc(db, "tasks", id));
+  const deleteTask = async (id) => {
+    const taskRef = firestoreDoc(db, "tasks", id);
+    const docSnap = await getDoc(taskRef);
+    if (docSnap.exists()) {
+      const taskTitle = docSnap.data().title;
+      await deleteDoc(taskRef);
+      await logActivity(`Deleted task: "${taskTitle}"`);
+    }
+  }
 
   /* stopwatch handlers */
   const startTimer = async () => {
@@ -269,6 +295,10 @@ export default function TaskManager({ user, isImpersonating = false }) {
 
   const saveDialog = async () => {
     if (!activeTask) return;
+    const oldTitle = activeTask.title;
+    const oldDueDate = activeTask.dueDate.toDate().toISOString().split("T")[0];
+    const oldProgress = activeTask.progress ?? 0;
+
     const [y, m, d] = dueDateDraft.split("-").map(Number);
     const localDate = new Date(y, m - 1, d);
     await updateDoc(firestoreDoc(db, "tasks", activeTask.id), {
@@ -278,6 +308,18 @@ export default function TaskManager({ user, isImpersonating = false }) {
       dueDate: Timestamp.fromDate(localDate),
       progress: progressDraft,
     });
+    
+    // Log changes
+    if (oldTitle !== titleDraft) {
+      await logActivity(`Renamed task from "${oldTitle}" to "${titleDraft}"`);
+    }
+    if (oldDueDate !== dueDateDraft) {
+      await logActivity(`Updated due date for "${titleDraft}" from ${oldDueDate} to ${dueDateDraft}`);
+    }
+    if (oldProgress !== progressDraft) {
+      await logActivity(`Updated progress for "${titleDraft}" from ${oldProgress}% to ${progressDraft}%`);
+    }
+    
     closeDialog();
   };
 
