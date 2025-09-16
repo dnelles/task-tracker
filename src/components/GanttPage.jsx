@@ -167,7 +167,7 @@ export default function GanttPage({ user }) {
                                 height: "20px",
                                 backgroundColor: getProgressColor(task.progress ?? 0),
                                 borderRadius: "4px",
-                                zIndex: 0,
+                                zIndex: 3,
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "center",
