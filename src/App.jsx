@@ -63,7 +63,7 @@ export default function App() {
         <Link to="/stats"    className="nav-link">Stats</Link>
         <Link to="/gantt"    className="nav-link">Gantt</Link>
         <Link to="/settings" className="nav-link">Settings</Link>
-        <Link to="/activity" className="nav-link">Activity Log</Link>
+        <Link to="/activity" className="nav-link">Log</Link>
 
         {(ADMIN_USER_IDS.includes(authUser?.uid) || userRole === "admin") && (
           <Link to="/admin" className="nav-link" style={{ color: "red" }}>

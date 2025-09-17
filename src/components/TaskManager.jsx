@@ -13,6 +13,8 @@ import {
   orderBy,
   increment,
   where,
+  arrayUnion,
+  setDoc,
 } from "firebase/firestore";
 import { db, auth } from "../firebase";
 
@@ -162,6 +164,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
   const disconnectGoogle = async () => {
     try {
       await authedFetch("/api/google/revoke", { method: "POST" });
+      await logActivity(`Disconnected Google Tasks integration`);
     } catch {
       // ignore
     } finally {
@@ -170,14 +173,19 @@ export default function TaskManager({ user, isImpersonating = false }) {
     }
   };
 
-  /* ─────────────────────────────── Activity Logging ──────────────────────── */
+  /* ─────────────────────────────── Activity Logging (Server-Side) ──────────────────────── */
   const logActivity = async (message) => {
     try {
-      await addDoc(collection(db, "activityLog"), {
-        userId,
-        message,
-        timestamp: serverTimestamp(),
+      const res = await authedFetch("/api/logActivity", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message }),
       });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Failed to log activity");
+      }
     } catch (error) {
       console.error("Error logging activity:", error);
     }
@@ -232,7 +240,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
       if (docSnap.exists()) {
         const taskTitle = docSnap.data().title;
         await updateDoc(taskRef, updates);
-        await logActivity(`${!cur ? "Marked" : "Unmarked"} task as ${!cur ? "complete" : "incomplete"}: "${taskTitle}"`);
+        await logActivity(`${!cur ? "Marked" : "Unmarked"} task as complete: "${taskTitle}"`);
         showToast("Task status updated!", "success");
       }
     } catch (error) {
@@ -350,7 +358,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
         await logActivity(`Renamed task from "${oldTitle}" to "${titleDraft}"`);
       }
       if (oldDueDate !== dueDateDraft) {
-        await logActivity(`Updated due date for "${titleDraft}" from ${oldDueDate} to ${dueDateDraft}`);
+        await logActivity(`Updated due date for "${titleDraft}"`);
       }
       if (oldProgress !== progressDraft) {
         await logActivity(`Updated progress for "${titleDraft}" from ${oldProgress}% to ${progressDraft}%`);
