@@ -424,7 +424,12 @@ export default function TaskManager({ user, isImpersonating = false }) {
   };
 
   /* ─────────────────────────────── helpers ──────────────────────────────── */
-  const fmtHMS = (s) => new Date(s * 1000).toISOString().substr(11, 8);
+  const fmtHMS = (s) => {
+    const hours = Math.floor(s / 3600);
+    const minutes = Math.floor((s % 3600) / 60);
+    const seconds = s % 60;
+    return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  };
   const getEstimatedTimeRemaining = () => {
     if (!activeTask || typeof activeTask.timeSpent !== "number") return "Unknown";
     if (progressDraft <= 0 || progressDraft >= 100) return "Unknown";
