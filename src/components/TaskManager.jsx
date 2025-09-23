@@ -261,7 +261,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
         showToast("Task deleted successfully!", "success");
       }
     } catch (error) {
-      showToast("Failed to delete task.", "error");
+    showToast("Failed to delete task.", "error");
       console.error("Error deleting task:", error);
     }
   }
@@ -294,10 +294,16 @@ export default function TaskManager({ user, isImpersonating = false }) {
     setTimerRunning(false);
 
     try {
+      const newTimeSpent = (activeTask.timeSpent || 0) + secs;
       await updateDoc(firestoreDoc(db, "tasks", activeTask.id), {
         timeSpent: increment(secs),
       });
-      const logEntry = { timestamp: Timestamp.now(), action: "stop", duration: secs };
+      const logEntry = {
+        timestamp: Timestamp.now(),
+        action: "stop",
+        duration: secs,
+        totalTime: newTimeSpent // Add the new total time to the log entry
+      };
       await updateDoc(firestoreDoc(db, "tasks", activeTask.id), {
         timeLogs: [...(activeTask.timeLogs || []), logEntry],
       });
@@ -305,7 +311,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
         p
           ? {
               ...p,
-              timeSpent: (p.timeSpent || 0) + secs,
+              timeSpent: newTimeSpent,
               timeLogs: [...(p.timeLogs || []), logEntry],
             }
           : p
@@ -716,7 +722,12 @@ export default function TaskManager({ user, isImpersonating = false }) {
                     const secs = Math.round(Number(manualMinutes) * 60);
                     const newTime = Math.max(0, (activeTask.timeSpent || 0) + secs);
                     await updateDoc(firestoreDoc(db, "tasks", activeTask.id), { timeSpent: newTime });
-                    const logEntry = { timestamp: Timestamp.now(), action: "manual_add", duration: secs };
+                    const logEntry = {
+                      timestamp: Timestamp.now(),
+                      action: "manual_add",
+                      duration: secs,
+                      totalTime: newTime // Add the new total time to the log entry
+                    };
                     await updateDoc(firestoreDoc(db, "tasks", activeTask.id), {
                       timeLogs: [...(activeTask.timeLogs || []), logEntry],
                     });
@@ -736,7 +747,12 @@ export default function TaskManager({ user, isImpersonating = false }) {
                     if (!activeTask || isNaN(Number(manualMinutes))) return;
                     const secs = Math.max(0, Math.round(Number(manualMinutes) * 60));
                     await updateDoc(firestoreDoc(db, "tasks", activeTask.id), { timeSpent: secs });
-                    const logEntry = { timestamp: Timestamp.now(), action: "manual_set", duration: secs };
+                    const logEntry = {
+                      timestamp: Timestamp.now(),
+                      action: "manual_set",
+                      duration: secs,
+                      totalTime: secs // Add the new total time to the log entry
+                    };
                     await updateDoc(firestoreDoc(db, "tasks", activeTask.id), {
                       timeLogs: [...(activeTask.timeLogs || []), logEntry],
                     });
@@ -790,8 +806,8 @@ export default function TaskManager({ user, isImpersonating = false }) {
                         {new Date(log.timestamp.seconds * 1000).toLocaleString()}:
                       </strong>{" "}
                       {log.action === "start" && "Timer started"}
-                      {log.action === "stop" && `Timer stopped (+${fmtHMS(log.duration || 0)})`}
-                      {log.action === "manual_add" && `Manual time added (+${fmtHMS(log.duration || 0)})`}
+                      {log.action === "stop" && `Timer stopped (+${fmtHMS(log.duration || 0)}) -- Total: ${fmtHMS(log.totalTime || 0)}`}
+                      {log.action === "manual_add" && `Manual time added (+${fmtHMS(log.duration || 0)}) -- Total: ${fmtHMS(log.totalTime || 0)}`}
                       {log.action === "manual_set" && `Manual time set to ${fmtHMS(log.duration || 0)}`}
                     </li>
                   ))}
