@@ -236,3 +236,34 @@
     background-color: #555;
     color: #eee
   }
+
+  /* Import popup button row */
+.import-actions-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+/* Make the two top buttons match size/shape */
+.import-actions-row .import-action {
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1;
+  min-height: 40px;
+}
+
+/* Optional: make them equal width on small screens */
+@media (max-width: 520px) {
+  .import-actions-row .import-action {
+    flex: 1;
+  }
+}
+
+/* Make the big Import button look centered and consistent */
+.time-log-popup .settings-save-button {
+  border-radius: 12px;
+  min-height: 44px;
+  font-size: 15px;
+}
