@@ -13,8 +13,6 @@ import {
   orderBy,
   increment,
   where,
-  arrayUnion,
-  setDoc,
 } from "firebase/firestore";
 import { db, auth } from "../firebase";
 
@@ -193,17 +191,23 @@ export default function TaskManager({ user, isImpersonating = false }) {
 
   /* ─────────────────────────────── Task CRUD Helpers ──────────────────────── */
   const addTask = async () => {
-    if (!title || !dueDate) return alert("Title and due date are required");
-    const [y, m, d] = dueDate.split("-").map(Number);
-    const localDate = new Date(y, m - 1, d); // midnight local
+    // ✅ Due date is optional now
+    if (!title) return alert("Title is required");
+
+    let dueDateTimestamp = null;
+    if (dueDate) {
+      const [y, m, d] = dueDate.split("-").map(Number);
+      const localDate = new Date(y, m - 1, d); // midnight local
+      dueDateTimestamp = Timestamp.fromDate(localDate);
+    }
 
     showToast("Adding new task...", "info", 5000);
     try {
       await addDoc(collection(db, "tasks"), {
         title,
         category,
-        dueDate: Timestamp.fromDate(localDate),
-        startDate: serverTimestamp(), //Set current date/time as startdate
+        dueDate: dueDateTimestamp, // ✅ null allowed
+        startDate: serverTimestamp(), // Set current date/time as startdate
         completed: false,
         timeSpent: 0,
         className: category === "School" ? className : "",
@@ -232,7 +236,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
     } else {
       updates.completedAt = null;
     }
-    
+
     showToast("Updating task status...", "info", 5000);
     try {
       const taskRef = firestoreDoc(db, "tasks", id);
@@ -240,7 +244,9 @@ export default function TaskManager({ user, isImpersonating = false }) {
       if (docSnap.exists()) {
         const taskTitle = docSnap.data().title;
         await updateDoc(taskRef, updates);
-        await logActivity(`${!cur ? "Marked" : "Unmarked"} task as complete: "${taskTitle}"`);
+        await logActivity(
+          `${!cur ? "Marked" : "Unmarked"} task as complete: "${taskTitle}"`
+        );
         showToast("Task status updated!", "success");
       }
     } catch (error) {
@@ -261,10 +267,10 @@ export default function TaskManager({ user, isImpersonating = false }) {
         showToast("Task deleted successfully!", "success");
       }
     } catch (error) {
-    showToast("Failed to delete task.", "error");
+      showToast("Failed to delete task.", "error");
       console.error("Error deleting task:", error);
     }
-  }
+  };
 
   /* stopwatch handlers */
   const startTimer = async () => {
@@ -302,7 +308,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
         timestamp: Timestamp.now(),
         action: "stop",
         duration: secs,
-        totalTime: newTimeSpent // Add the new total time to the log entry
+        totalTime: newTimeSpent, // Add the new total time to the log entry
       };
       await updateDoc(firestoreDoc(db, "tasks", activeTask.id), {
         timeLogs: [...(activeTask.timeLogs || []), logEntry],
@@ -328,7 +334,14 @@ export default function TaskManager({ user, isImpersonating = false }) {
     setNotesDraft(task.notes || "");
     setLinkDraft(task.link || "");
     setProgressDraft(task.progress ?? 0);
-    setDueDateDraft(task.dueDate.toDate().toISOString().split("T")[0]);
+
+    // ✅ handle tasks with no due date
+    setDueDateDraft(
+      task.dueDate?.toDate?.()
+        ? task.dueDate.toDate().toISOString().split("T")[0]
+        : ""
+    );
+
     setDialogOpen(true);
     setTimerRunning(false);
     setElapsedMs(0);
@@ -343,22 +356,31 @@ export default function TaskManager({ user, isImpersonating = false }) {
 
   const saveDialog = async () => {
     if (!activeTask) return;
+
     const oldTitle = activeTask.title;
-    const oldDueDate = activeTask.dueDate.toDate().toISOString().split("T")[0];
+    const oldDueDate = activeTask.dueDate?.toDate?.()
+      ? activeTask.dueDate.toDate().toISOString().split("T")[0]
+      : "";
     const oldProgress = activeTask.progress ?? 0;
 
     showToast("Saving changes...", "info", 5000);
     try {
-      const [y, m, d] = dueDateDraft.split("-").map(Number);
-      const localDate = new Date(y, m - 1, d);
+      // ✅ due date optional
+      let dueDateTimestamp = null;
+      if (dueDateDraft) {
+        const [y, m, d] = dueDateDraft.split("-").map(Number);
+        const localDate = new Date(y, m - 1, d);
+        dueDateTimestamp = Timestamp.fromDate(localDate);
+      }
+
       await updateDoc(firestoreDoc(db, "tasks", activeTask.id), {
         title: titleDraft,
         notes: notesDraft,
         link: linkDraft.trim(),
-        dueDate: Timestamp.fromDate(localDate),
+        dueDate: dueDateTimestamp, // ✅ null allowed
         progress: progressDraft,
       });
-      
+
       // Log changes
       if (oldTitle !== titleDraft) {
         await logActivity(`Renamed task from "${oldTitle}" to "${titleDraft}"`);
@@ -367,7 +389,9 @@ export default function TaskManager({ user, isImpersonating = false }) {
         await logActivity(`Updated due date for "${titleDraft}"`);
       }
       if (oldProgress !== progressDraft) {
-        await logActivity(`Updated progress for "${titleDraft}" from ${oldProgress}% to ${progressDraft}%`);
+        await logActivity(
+          `Updated progress for "${titleDraft}" from ${oldProgress}% to ${progressDraft}%`
+        );
       }
       showToast("Changes saved successfully!", "success");
       closeDialog();
@@ -393,13 +417,16 @@ export default function TaskManager({ user, isImpersonating = false }) {
       if (!tokRes.ok) throw new Error(await tokRes.text());
       const { access_token } = await tokRes.json();
 
-      let ok = 0, fail = 0;
+      let ok = 0,
+        fail = 0;
       for (const t of sel) {
+        const hasDue = !!t.dueDate?.toDate?.();
         const body = {
-          title: `Due: ${t.title}`,
+          title: hasDue ? `Due: ${t.title}` : t.title,
           notes: t.notes || "",
-          due: t.dueDate.toDate().toISOString(), // RFC 3339
+          ...(hasDue ? { due: t.dueDate.toDate().toISOString() } : {}), // ✅ only include due if it exists
         };
+
         const res = await fetch(
           "https://tasks.googleapis.com/tasks/v1/lists/@default/tasks",
           {
@@ -411,7 +438,8 @@ export default function TaskManager({ user, isImpersonating = false }) {
             body: JSON.stringify(body),
           }
         );
-        if (res.ok) ok++; else fail++;
+        if (res.ok) ok++;
+        else fail++;
       }
 
       if (fail === 0) {
@@ -434,7 +462,9 @@ export default function TaskManager({ user, isImpersonating = false }) {
     const hours = Math.floor(s / 3600);
     const minutes = Math.floor((s % 3600) / 60);
     const seconds = s % 60;
-    return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    return `${hours}:${minutes.toString().padStart(2, "0")}:${seconds
+      .toString()
+      .padStart(2, "0")}`;
   };
   const getEstimatedTimeRemaining = () => {
     if (!activeTask || typeof activeTask.timeSpent !== "number") return "Unknown";
@@ -579,7 +609,9 @@ export default function TaskManager({ user, isImpersonating = false }) {
           {tasks
             .filter((t) => t.completed === showCompleted)
             .map((task) => {
-              const overdue = task.dueDate.toDate() < new Date() && !task.completed;
+              const hasDue = !!task.dueDate?.toDate?.();
+              const overdue = hasDue && task.dueDate.toDate() < new Date() && !task.completed;
+
               return (
                 <li
                   key={task.id}
@@ -601,7 +633,10 @@ export default function TaskManager({ user, isImpersonating = false }) {
                         className={`task-due-date ${overdue ? "overdue" : ""}`}
                         style={{ marginLeft: 12 }}
                       >
-                        📅 {task.dueDate.toDate().toLocaleDateString()}
+                        📅{" "}
+                        {hasDue
+                          ? task.dueDate.toDate().toLocaleDateString()
+                          : "No due date"}
                       </span>
                     </span>
                   </div>
@@ -660,7 +695,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
               onChange={(e) => setLinkDraft(e.target.value)}
             />
 
-            {/* ⭐ NEW due-date field */}
+            {/* due-date field (optional) */}
             <input
               className="dialog-field"
               type="date"
@@ -726,7 +761,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
                       timestamp: Timestamp.now(),
                       action: "manual_add",
                       duration: secs,
-                      totalTime: newTime // Add the new total time to the log entry
+                      totalTime: newTime, // Add the new total time to the log entry
                     };
                     await updateDoc(firestoreDoc(db, "tasks", activeTask.id), {
                       timeLogs: [...(activeTask.timeLogs || []), logEntry],
@@ -751,7 +786,7 @@ export default function TaskManager({ user, isImpersonating = false }) {
                       timestamp: Timestamp.now(),
                       action: "manual_set",
                       duration: secs,
-                      totalTime: secs // Add the new total time to the log entry
+                      totalTime: secs, // Add the new total time to the log entry
                     };
                     await updateDoc(firestoreDoc(db, "tasks", activeTask.id), {
                       timeLogs: [...(activeTask.timeLogs || []), logEntry],
@@ -791,7 +826,10 @@ export default function TaskManager({ user, isImpersonating = false }) {
 
       {/* Time Log Sub-popup */}
       {showTimeLogPopup && (
-        <div className="time-log-popup-overlay" onClick={() => setShowTimeLogPopup(false)}>
+        <div
+          className="time-log-popup-overlay"
+          onClick={() => setShowTimeLogPopup(false)}
+        >
           <div className="time-log-popup" onClick={(e) => e.stopPropagation()}>
             <h4>Time Log</h4>
             {!activeTask?.timeLogs || activeTask.timeLogs.length === 0 ? (
@@ -806,14 +844,24 @@ export default function TaskManager({ user, isImpersonating = false }) {
                         {new Date(log.timestamp.seconds * 1000).toLocaleString()}:
                       </strong>{" "}
                       {log.action === "start" && "Timer started"}
-                      {log.action === "stop" && `Timer stopped (+${fmtHMS(log.duration || 0)}) -- Total: ${fmtHMS(log.totalTime || 0)}`}
-                      {log.action === "manual_add" && `Manual time added (+${fmtHMS(log.duration || 0)}) -- Total: ${fmtHMS(log.totalTime || 0)}`}
-                      {log.action === "manual_set" && `Manual time set to ${fmtHMS(log.duration || 0)}`}
+                      {log.action === "stop" &&
+                        `Timer stopped (+${fmtHMS(log.duration || 0)}) -- Total: ${fmtHMS(
+                          log.totalTime || 0
+                        )}`}
+                      {log.action === "manual_add" &&
+                        `Manual time added (+${fmtHMS(log.duration || 0)}) -- Total: ${fmtHMS(
+                          log.totalTime || 0
+                        )}`}
+                      {log.action === "manual_set" &&
+                        `Manual time set to ${fmtHMS(log.duration || 0)}`}
                     </li>
                   ))}
               </ul>
             )}
-            <button onClick={() => setShowTimeLogPopup(false)} className="button-primary time-log-close-btn">
+            <button
+              onClick={() => setShowTimeLogPopup(false)}
+              className="button-primary time-log-close-btn"
+            >
               Close
             </button>
           </div>
